@@ -23,7 +23,8 @@ export interface Program {
   code: string;
   name: string;
   therapeuticArea: string;
-  phase: "Discovery" | "Preclinical" | "Phase 1" | "Phase 2" | "Phase 3";
+  /** Null when the program came from an import and nobody has set it yet. */
+  phase: "Discovery" | "Preclinical" | "Phase 1" | "Phase 2" | "Phase 3" | null;
 }
 
 export interface Vendor {
