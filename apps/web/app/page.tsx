@@ -145,18 +145,24 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         </ChartCard>
 
         <ChartCard
-          title={runway.months === null ? "Cash is not decreasing" : `Cash lasts about ${formatMonths(runway.months)} at the current burn`}
-          subtitle={`Month-end cash, USD · projection at ${formatCompactCurrency(runway.avgBurn)}/mo (3-month average net burn)`}
+          title={
+            runway.months === null
+              ? "Cash is not decreasing"
+              : cash.zeroText
+                ? `Cash runs out around ${cash.zeroText} at today's spending`
+                : "Cash lasts more than 3 years at today's spending"
+          }
+          subtitle={`Solid line: cash in the bank at each month end. Dashed: where it goes if spending stays at ${formatCompactCurrency(runway.avgBurn)}/month.`}
           legend={[
-            { label: "Cash balance", color: "var(--series-1)" },
-            { label: "Projection", color: "var(--series-1)", dashed: true },
+            { label: "Actual cash", color: "var(--series-1)" },
+            { label: "Forecast", color: "var(--series-1)", dashed: true },
           ]}
           table={{
-            columns: ["Month", "Cash", "Projected"],
+            columns: ["Month", "Actual cash", "Forecast"],
             rows: cash.data.map((d) => [d.label, d.actual === null ? "—" : formatCompactCurrency(d.actual), d.projected === null ? "—" : formatCompactCurrency(d.projected)]),
           }}
         >
-          <CashChart data={cash.data} today={cash.today} zeroLabel={cash.zeroLabel} />
+          <CashChart data={cash.data} today={cash.today} todayValue={cash.todayValue} zeroLabel={cash.zeroLabel} zeroText={cash.zeroText} events={cash.events} />
         </ChartCard>
       </div>
 

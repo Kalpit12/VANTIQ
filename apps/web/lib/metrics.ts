@@ -83,6 +83,7 @@ export function cashProjection(ledger: Ledger, view: View) {
   const last = history[history.length - 1];
   if (last) last.projected = last.actual;
   let zeroLabel: string | null = null;
+  let zeroText: string | null = null;
   if (avgBurn > 0) {
     let c = cash;
     for (let i = 1; i <= 36 && c > 0; i++) {
@@ -90,8 +91,23 @@ export function cashProjection(ledger: Ledger, view: View) {
       const p = addMonths(view.period, i);
       const label = periodLabel(p, true) + " " + p.slice(2, 4);
       history.push({ label, actual: null, projected: c });
-      if (c === 0) zeroLabel = label;
+      if (c === 0) {
+        zeroLabel = label;
+        zeroText = periodLabel(p);
+      }
     }
   }
-  return { data: history, today: last?.label ?? "", zeroLabel };
+  // Funding rounds: cash rose by more than the month's net result explains.
+  const events: { label: string; value: number; text: string }[] = [];
+  for (let i = 1; i < view.trend.length; i++) {
+    const p = view.trend[i]!;
+    const now = ledger.cashAt(p);
+    const before = ledger.cashAt(view.trend[i - 1]!);
+    if (now === null || before === null) continue;
+    const inflow = now - before - ledger.netIncome([p]);
+    if (inflow > 100_000_000) {
+      events.push({ label: periodLabel(p, true) + " " + p.slice(2, 4), value: now, text: `Funding +${formatCompactCurrency(inflow)}` });
+    }
+  }
+  return { data: history, today: last?.label ?? "", todayValue: cash, zeroLabel, zeroText, events };
 }
