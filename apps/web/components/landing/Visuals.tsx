@@ -1,31 +1,56 @@
 // Decorative product visuals for the landing page showcase. All figures are the Helixa sample company.
 
-const SOURCES = ["QuickBooks Online", "Xero", "NetSuite", "Sage Intacct", "CSV · Excel"];
+const SOURCES = [
+  ["QB", "QuickBooks Online"],
+  ["X", "Xero"],
+  ["N", "NetSuite"],
+  ["SI", "Sage Intacct"],
+  ["CSV", "CSV · Excel"],
+];
+// Source chip centres in the 300-unit-high wire canvas: 44px chips spread over 300px.
+const WIRE_Y = [22, 86, 150, 214, 278];
 
 export function ConnectVisual() {
   return (
     <div className="lv lv-connect" aria-hidden>
       <div className="lv-sources">
-        {SOURCES.map((s, i) => (
-          <span key={s} style={{ "--i": i } as React.CSSProperties}>
-            <i />
-            {s}
+        {SOURCES.map(([mono, name], i) => (
+          <span key={name} style={{ "--i": i } as React.CSSProperties}>
+            <i>{mono}</i>
+            {name}
           </span>
         ))}
       </div>
-      <svg className="lv-wires" viewBox="0 0 200 300" preserveAspectRatio="none">
-        {[30, 90, 150, 210, 270].map((y, i) => (
-          <path key={y} d={`M0 ${y} C 100 ${y}, 100 150, 200 150`} style={{ "--i": i } as React.CSSProperties} />
+      <svg className="lv-wires" viewBox="0 0 120 300" preserveAspectRatio="none">
+        {WIRE_Y.map((y, i) => (
+          <g key={y}>
+            <path d={`M0 ${y} C 70 ${y}, 50 150, 120 150`} />
+            <circle r="2.2" className="lv-pulse">
+              <animateMotion
+                dur="2.4s"
+                repeatCount="indefinite"
+                begin={`${i * 0.45}s`}
+                path={`M0 ${y} C 70 ${y}, 50 150, 120 150`}
+              />
+            </circle>
+          </g>
         ))}
       </svg>
       <div className="lv-hub">
         <div className="lv-hub-core">
-          <span className="lv-hub-mark" />
+          <span className="lv-hub-icon">
+            <span />
+          </span>
+          <span className="lv-hub-word">
+            vant<i>ı</i>q
+          </span>
         </div>
-        <p>
-          <b>24 months</b> of ledger, budget and cash
-        </p>
-        <p className="lv-dim">Re-uploads are deduplicated</p>
+        <div className="lv-hub-text">
+          <p>
+            <b>24 months</b> of ledger, budget and cash
+          </p>
+          <p className="lv-dim">Re-uploads are deduplicated</p>
+        </div>
       </div>
     </div>
   );
@@ -102,43 +127,75 @@ export function ReviewVisual() {
 }
 
 export function RunwayVisual() {
-  const pts = [22.8, 103.1, 99.0, 94.5, 90.0, 85.6, 80.9, 76.2, 71.9, 67.1, 64.4, 59.6];
-  const fc = Array.from({ length: 16 }, (_, k) => Math.max(0, 59.6 - 4.08 * k));
-  const n = pts.length + fc.length - 1;
-  const x = (i: number) => (i / (n - 1)) * 400;
-  const y = (v: number) => 10 + (1 - v / 110) * 180;
-  const a = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
-  const f = fc.map((v, k) => `${k ? "L" : "M"}${x(pts.length - 1 + k).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
-  // Scenario band: burn 15% lower to 15% higher.
-  const hi = fc.map((_, k) => Math.max(0, 59.6 - 4.08 * 0.85 * k));
-  const lo = fc.map((_, k) => Math.max(0, 59.6 - 4.08 * 1.15 * k));
+  // Helixa month-end cash in $M, Oct 2025 to Sep 2026, then the forecast at today's $4.08M/month burn.
+  const actual = [22.8, 103.1, 99.0, 94.5, 90.0, 85.6, 80.9, 76.2, 71.9, 67.1, 64.4, 59.6];
+  const burn = 4.08;
+  const months = 27; // Oct 2025 .. Dec 2027
+  const W = 440;
+  const H = 230;
+  const L = 44;
+  const R = 16;
+  const T = 18;
+  const B = 30;
+  const x = (i: number) => L + (i / (months - 1)) * (W - L - R);
+  const y = (v: number) => T + (1 - v / 120) * (H - T - B);
+  const pt = (i: number, v: number) => `${x(i).toFixed(1)} ${y(v).toFixed(1)}`;
+  const today = actual.length - 1;
+  const fc = Array.from({ length: months - today }, (_, k) => Math.max(0, 59.6 - burn * k));
+  const line = actual.map((v, i) => `${i ? "L" : "M"}${pt(i, v)}`).join(" ");
+  const area = `${line} L${pt(today, 0)} L${pt(0, 0)} Z`;
+  const fcLine = fc.map((v, k) => `${k ? "L" : "M"}${pt(today + k, v)}`).join(" ");
+  // Band: spending 15% slower to 15% faster than today.
+  const slow = fc.map((_, k) => Math.max(0, 59.6 - burn * 0.85 * k));
+  const fast = fc.map((_, k) => Math.max(0, 59.6 - burn * 1.15 * k));
   const band =
-    hi.map((v, k) => `${k ? "L" : "M"}${x(pts.length - 1 + k).toFixed(1)} ${y(v).toFixed(1)}`).join(" ") +
-    " " +
-    lo
-      .map((v, k) => [x(pts.length - 1 + k), y(v)] as const)
+    slow.map((v, k) => `${k ? "L" : "M"}${pt(today + k, v)}`).join(" ") +
+    fast
+      .map((v, k) => [today + k, v] as const)
       .reverse()
-      .map(([px, py]) => `L${px.toFixed(1)} ${py.toFixed(1)}`)
-      .join(" ") +
+      .map(([i, v]) => ` L${pt(i, v)}`)
+      .join("") +
     " Z";
+  const zeroI = months - 1;
   return (
     <div className="lv lv-runway" aria-hidden>
       <div className="lv-card-head">
         <span>Cash runway</span>
         <span className="lv-chip">14.6 months</span>
       </div>
-      <svg viewBox="0 0 400 200" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="lv-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#3fb8af" stopOpacity="0.35" />
-            <stop offset="1" stopColor="#3fb8af" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={`${a} L${x(pts.length - 1)} 190 L0 190 Z`} fill="url(#lv-fill)" />
+      <svg viewBox={`0 0 ${W} ${H}`}>
+        {[0, 40, 80, 120].map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className={v === 0 ? "lv-axis" : "lv-grid"} />
+            <text x={L - 8} y={y(v) + 4} textAnchor="end" className="lv-tick">
+              {v === 0 ? "$0" : `$${v}M`}
+            </text>
+          </g>
+        ))}
+        {[
+          [0, "Oct 25"],
+          [today, "Sep 26"],
+          [zeroI, "Dec 27"],
+        ].map(([i, label]) => (
+          <text key={label} x={x(i as number)} y={H - 8} textAnchor="middle" className="lv-tick">
+            {label}
+          </text>
+        ))}
         <path d={band} className="lv-band" />
-        <path d={a} className="lv-line" pathLength={1} />
-        <path d={f} className="lv-fc" />
-        <circle cx={x(n - 1)} cy={y(0)} r="4" className="lv-zero" />
+        <path d={area} className="lv-area" />
+        <line x1={x(today)} x2={x(today)} y1={T} y2={y(0)} className="lv-today" />
+        <text x={x(today) + 6} y={T + 10} className="lv-tick lv-tick-hi">
+          Today
+        </text>
+        <path d={fcLine} className="lv-fc" />
+        <path d={line} className="lv-line" pathLength={1} />
+        <circle cx={x(1)} cy={y(actual[1]!)} r="4" className="lv-dot" />
+        <text x={x(1) + 9} y={y(actual[1]!) - 6} className="lv-tick lv-tick-hi">
+          +$85.0M funding
+        </text>
+        <circle cx={x(today)} cy={y(59.6)} r="4" className="lv-dot" />
+        <circle cx={x(zeroI)} cy={y(0)} r="4.5" className="lv-zero" />
+        <circle cx={x(zeroI)} cy={y(0)} r="4.5" className="lv-zero-ring" />
       </svg>
       <div className="lv-runway-foot">
         <div>
