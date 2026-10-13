@@ -7,3 +7,6 @@ export * from "./ledger";
 export * from "./mappings";
 export * from "./sample";
 export { migrateDb } from "./migrate";
+export * from "./connections";
+export * from "./sync";
+export { encryptSecret, decryptSecret } from "./secrets";

@@ -11,11 +11,14 @@ export function NoData({ title, canImport }: { title: string; canImport: boolean
       <Card className="max-w-[720px] p-6">
         <h2 className="text-[17px] font-semibold text-ink">Bring in your numbers</h2>
         <p className="mt-1 text-[13px] text-ink-2">
-          Upload a general ledger export from QuickBooks, Xero, NetSuite or Sage Intacct (CSV or Excel). Add your budget and month-end cash balances to see variances and runway.
+          Connect QuickBooks, Xero, NetSuite or Sage Intacct, or upload a general ledger export (CSV or Excel). Add your budget and month-end cash balances to see variances and runway.
         </p>
         {canImport ? (
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Link href="/import" className="inline-flex h-9 items-center rounded-md bg-accent px-4 text-[14px] font-medium text-accent-contrast hover:opacity-90">
+            <Link href="/connections" className="inline-flex h-9 items-center rounded-md bg-accent px-4 text-[14px] font-medium text-accent-contrast hover:opacity-90">
+              Connect accounting
+            </Link>
+            <Link href="/import" className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface px-4 text-[14px] font-medium text-ink hover:bg-subtle">
               Import a file
             </Link>
             <form action={loadSampleAction}>

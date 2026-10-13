@@ -103,3 +103,33 @@ test("companies are isolated and viewers cannot import", async ({ page, browser 
   await other.goto("/statements");
   await expect(other).toHaveURL(/\/sign-in$/);
 });
+
+test("connect the sandbox accounting system, sync, and see every month balance", async ({ page, request }) => {
+  await signUp(page, "Connected Bio");
+  await page.getByRole("link", { name: "Connect accounting" }).click();
+  await expect(page.getByRole("heading", { name: "Connections" })).toBeVisible();
+  // Without Merge keys the real systems are listed but cannot be connected.
+  await expect(page.getByRole("button", { name: "Connect QuickBooks Online" })).toBeDisabled();
+  await page.getByRole("button", { name: "Connect the sandbox" }).click();
+  await expect(page.getByRole("heading", { name: "QuickBooks Online (sandbox)" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("All 24 months match QuickBooks Online (sandbox).")).toBeVisible();
+  await expect(page.getByRole("row", { name: /First sync/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Sync now" }).click();
+  await expect(page.getByRole("row", { name: /Sync now 0 0 0 Done/ })).toBeVisible();
+
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Out of balance/)).toHaveCount(0);
+
+  // The scheduled sync endpoint only answers the cron secret.
+  expect((await request.get("/api/cron/sync")).status()).toBe(401);
+  const cron = await request.get("/api/cron/sync", { headers: { authorization: "Bearer e2e-cron-secret" } });
+  expect(cron.status()).toBe(200);
+
+  await page.goto("/connections");
+  await page.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByRole("button", { name: "Connect Xero" })).toBeVisible();
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible();
+});

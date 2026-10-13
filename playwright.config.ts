@@ -30,7 +30,7 @@ export default defineConfig({
       url: "http://localhost:3101/sign-in",
       timeout: 120_000,
       reuseExistingServer: true,
-      env: { DATABASE_URL: E2E_DATABASE_URL },
+      env: { DATABASE_URL: E2E_DATABASE_URL, CRON_SECRET: "e2e-cron-secret" },
     },
   ],
 });

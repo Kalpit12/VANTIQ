@@ -128,6 +128,9 @@ importers:
       '@vantiq/domain':
         specifier: workspace:*
         version: link:../domain
+      '@vantiq/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       exceljs:
         specifier: 4.4.0
         version: 4.4.0
@@ -141,9 +144,6 @@ importers:
       '@types/papaparse':
         specifier: 5.3.16
         version: 5.3.16
-      '@vantiq/fixtures':
-        specifier: workspace:*
-        version: link:../fixtures
       typescript:
         specifier: 5.9.3
         version: 5.9.3

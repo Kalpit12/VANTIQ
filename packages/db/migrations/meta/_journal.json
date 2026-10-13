@@ -15,6 +15,13 @@
       "when": 1791912719727,
       "tag": "0001_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791918590310,
+      "tag": "0002_connections",
+      "breakpoints": true
     }
   ]
 }

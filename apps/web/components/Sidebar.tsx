@@ -14,6 +14,7 @@ const NAV = [
 ];
 
 const DATA_NAV = [
+  { href: "/connections", label: "Connections", icon: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" },
   { href: "/import", label: "Import data", icon: "M12 15V3m0 0L8 7m4-4l4 4M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4" },
   { href: "/mappings", label: "Account mapping", icon: "M4 6h7M4 12h7M4 18h7M15 6l5 6-5 6" },
 ];

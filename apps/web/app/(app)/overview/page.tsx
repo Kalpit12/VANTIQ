@@ -14,6 +14,7 @@ import { CashChart } from "@/components/charts/CashChart";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
+import { ReconcileBanner } from "@/components/ReconcileBanner";
 import { getWorkspace } from "@/lib/data";
 import { can } from "@vantiq/db";
 import { cashProjection, findingTitle, materialLines, runwayAt, trendPoints, varianceFor } from "@/lib/metrics";
@@ -58,6 +59,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="Overview" subtitle={`${ledger.data.companyName} · ${view.label} · compared with budget`} />
+      {ws.mode === "db" && <ReconcileBanner companyId={ws.companyId!} />}
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">

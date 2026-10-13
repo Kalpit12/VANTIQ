@@ -107,6 +107,7 @@ export async function ledgerVersion(db: Db, companyId: string): Promise<string> 
       select concat_ws(':',
         (select count(*) from transactions),
         (select coalesce(max(completed_at)::text, '') from imports),
+        (select coalesce(max(finished_at)::text, '') from sync_runs where status = 'done'),
         (select coalesce(max(updated_at)::text, '') from account_mappings),
         (select count(*) from account_mappings),
         (select count(*) from programs),
