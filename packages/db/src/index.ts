@@ -10,3 +10,4 @@ export { migrateDb } from "./migrate";
 export * from "./connections";
 export * from "./sync";
 export { encryptSecret, decryptSecret } from "./secrets";
+export * from "./explanations";

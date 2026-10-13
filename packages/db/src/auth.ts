@@ -104,6 +104,7 @@ export const can = {
   view: (_r: Role) => true,
   importData: (r: Role) => r === "admin" || r === "finance",
   editMappings: (r: Role) => r === "admin" || r === "finance",
+  explain: (r: Role) => r === "admin" || r === "finance",
   manageMembers: (r: Role) => r === "admin",
 };
 

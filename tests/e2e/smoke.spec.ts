@@ -66,3 +66,18 @@ test("landing page loads, fits a phone and leads to the demo", async ({ page }) 
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("the demo explains each material variance and cites its transactions", async ({ page }) => {
+  await page.goto("/overview");
+  const cro = page.getByRole("link", { name: /CRO and clinical fees/ }).first();
+  await expect(cro.getByText("Auto draft")).toBeVisible();
+  await expect(cro.getByText(/Meridian Clinical Research/)).toBeVisible();
+  await cro.click();
+  const drawer = page.getByRole("dialog");
+  const block = drawer.getByRole("region", { name: "Explanation" });
+  await expect(block.getByText(/HX-101 ran \$\d+k over budget/)).toBeVisible();
+  const chips = block.getByRole("list", { name: "Cited transactions" }).getByRole("link");
+  expect(await chips.count()).toBeGreaterThan(0);
+  // Every cited transaction is one of the rows behind the number, marked as cited.
+  expect(await drawer.getByText("Cited", { exact: true }).count()).toBe(await chips.count());
+});

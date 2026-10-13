@@ -44,6 +44,7 @@ apps/web            Next.js app: screens, charts, drill-down, sign-in, import, m
 packages/domain     Pure finance logic: variances, roll-ups, bridge, runway, formatting, standard chart
 packages/db         Postgres schema and migrations (Drizzle), row-level security, auth, import pipeline, sync engine, ledger loader
 packages/integrations  CSV/Excel parsing, column guessing, amount/date parsing, mapping suggestions, accounting connectors (Merge, sandbox)
+packages/ai         Variance explanations: context builder, rule-based drafts, Claude drafts with citation checks
 packages/fixtures   Synthetic sample company and the same data as importable CSV files
 tests/e2e           Playwright end-to-end tests
 docs                design.md, architecture.md
@@ -59,8 +60,16 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 2. Data layer | PostgreSQL + Drizzle schema, tenant isolation, sign-in and roles, CSV/Excel import of ledger and budget, account mapping screen | Done |
 | 3. Landing page | Public page at `/` with an animated hero, live product mockup, features, how it works, security and sign-up calls to action; the app overview moves to `/overview` | Done |
 | 4. Accounting connections | Connect QuickBooks Online, Xero, NetSuite or Sage Intacct through Merge; 24-month first sync, then incremental and scheduled syncs; month-end net income check with out-of-balance alerts; sandbox connection to try it | Done |
-| 5. AI explanations | Claude-drafted variance explanations with cited transactions; accept, edit, reject | Next |
-| 6. Review pack | Pack page, PDF export, audit log, settings; Phase 1 test gate | Planned |
+| 5. AI explanations | Drafted explanation for every material variance, citing its transactions (Claude when a key is set, built-in rules otherwise); accept, edit, reject on Overview and Variances | Done |
+| 6. Review pack | Pack page, PDF export, audit log, settings; Phase 1 test gate | Next |
+
+### Milestone 5 decisions
+
+- **Free by default.** With no `ANTHROPIC_API_KEY`, drafts come from Vantiq's own rules: they name the programs that drove the variance and the standout transactions behind each (entries rare for that line), and are labelled "Auto draft". With a key, Claude writes the draft ("AI draft"); the default model is Sonnet to keep testing cheap (`VANTIQ_AI_MODEL` changes it).
+- **Grounding.** Claude sees only the one line's numbers, its split by program, the three prior months and up to 40 of its transactions. It must answer in a fixed JSON shape and cite transaction ids from that list; one unknown id and the draft is thrown away and the rule-based draft is used instead.
+- **Human in the loop.** Every draft is stored as a draft until Finance or Admin accepts, edits or rejects it, and each decision is in the audit log. Drafting again never overwrites a confirmed line unless someone asks for that line. A draft whose numbers have since moved is flagged.
+- **Evaluation.** `packages/ai/test` checks the drafts against the sample company's scripted events (driver named and cited in 5 of 5 cases) and that every material line in 21 months cites only its own transactions. Live Claude calls are not part of the test suite.
+- The demo shows rule-based drafts for every material line, read-only.
 
 ### Milestone 4 decisions
 

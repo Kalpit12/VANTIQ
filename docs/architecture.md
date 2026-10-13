@@ -216,6 +216,7 @@ All functions are pure and covered by unit tests plus property-based tests (fast
 - Structured outputs: responses are constrained to a JSON schema via `output_config.format` and parsed with the SDK's `messages.parse()`, validated by the same Zod schema the UI uses.
 - Refusal handling: check `stop_reason` before reading content; enable server-side fallbacks (`fallbacks: "default"`).
 - Grounding: the model only sees the company's own aggregated data and the specific transactions for that variance. Every cited transaction ID is checked to exist and belong to the variance; otherwise the draft is discarded.
+- Phase 1 implementation (milestone 5): drafts default to Sonnet for cost while testing, and fall back to a rule-based draft (labelled as such) when no key is set or Claude's answer fails validation.
 - Human in the loop: AI output is always stored as `ai_draft` and shown with an "AI draft" label until a user accepts or edits it.
 - Batch jobs: explanations for a whole period are generated in the background after sync; the Message Batches API can be used for large backfills at lower cost.
 - Privacy: no data used for training; prompts and outputs logged in our database for audit; inference region pinned where available (Phase 3).

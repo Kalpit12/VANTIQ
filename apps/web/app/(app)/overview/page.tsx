@@ -12,13 +12,16 @@ import { KpiCard } from "@/components/KpiCard";
 import { BulletRows } from "@/components/charts/BulletRows";
 import { CashChart } from "@/components/charts/CashChart";
 import { TrendChart } from "@/components/charts/TrendChart";
-import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
+import { Card, PageHeader, VarianceChip } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
 import { ReconcileBanner } from "@/components/ReconcileBanner";
 import { getWorkspace } from "@/lib/data";
 import { can } from "@vantiq/db";
 import { cashProjection, findingTitle, materialLines, runwayAt, trendPoints, varianceFor } from "@/lib/metrics";
-import { href, resolveView, type SearchParams } from "@/lib/view";
+import { href, one, resolveView, type SearchParams } from "@/lib/view";
+import { ExplanationBlock } from "@/components/ExplanationBlock";
+import { ExplanationPill } from "@/components/ExplanationCell";
+import { explanationsFor } from "@/lib/explanations";
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -36,7 +39,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const cashChange = prevCash === null ? 0 : runway.cash - prevCash;
 
   const spark = (id: string) => view.trend.map((p) => ledger.actual({ periods: [p], categoryIds: [id] }));
-  const attention = materialLines(ledger, view).slice(0, 5);
+  const material = materialLines(ledger, view);
+  const attention = material.slice(0, 5);
+  const expl = await explanationsFor(ws, view.periods);
+  const dc = one(sp, "dc");
+  const dcExplain = dc && (expl.has(dc) || material.some((m) => m.categoryId === dc)) ? dc : null;
+  const back = href("/overview", sp, { xerr: null });
   const opexTrend = trendPoints(ledger, view.trend, ["opex"]);
   const programRows = ledger
     .programTotals(view.periods, ["rd"])
@@ -106,13 +114,16 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-medium text-ink">{a.name}</span>
                       <span className="block text-[12px] text-ink-3">{a.parentName}</span>
+                      {expl.get(a.categoryId) && expl.get(a.categoryId)!.status !== "rejected" && (
+                        <span className="mt-1 line-clamp-2 text-[12px] text-ink-2">{expl.get(a.categoryId)!.text}</span>
+                      )}
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">
                       <span className="num text-[13px] text-ink">
                         {a.variance.delta > 0 ? "+" : ""}
                         {formatCompactCurrency(a.variance.delta)} <VarianceChip v={a.variance} />
                       </span>
-                      <StatusPill tone="neutral">Explanation pending</StatusPill>
+                      <ExplanationPill row={expl.get(a.categoryId)} />
                     </span>
                   </Link>
                 </li>
@@ -195,7 +206,27 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         )}
       </div>
 
-      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/overview" />
+      <DrillDrawer
+        ledger={ledger}
+        sp={sp}
+        view={view}
+        path="/overview"
+        cited={dcExplain ? expl.get(dcExplain)?.citedTransactionIds : undefined}
+        explanation={
+          dcExplain ? (
+            <ExplanationBlock
+              row={expl.get(dcExplain)}
+              ledger={ledger}
+              categoryId={dcExplain}
+              view={view}
+              back={back}
+              canEdit={ws.mode === "db" && can.explain(ws.role)}
+              demo={ws.mode === "demo"}
+              error={one(sp, "xerr")}
+            />
+          ) : undefined
+        }
+      />
     </>
   );
 }

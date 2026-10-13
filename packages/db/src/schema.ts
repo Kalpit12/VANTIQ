@@ -284,6 +284,38 @@ export const auditEvents = pgTable(
   (t) => [index("audit_events_company_idx").on(t.companyId, t.at)],
 );
 
+export const EXPLANATION_STATUS = ["ai_draft", "accepted", "edited", "rejected"] as const;
+export type ExplanationStatus = (typeof EXPLANATION_STATUS)[number];
+
+/**
+ * The written reason beside one variance line for one view of the books
+ * (`scope`: a month like 2026-09, or a range like 2026-01..2026-09). Drafts are
+ * always stored as `ai_draft` until a person accepts, edits or rejects them.
+ */
+export const explanations = pgTable(
+  "explanations",
+  {
+    id: id(),
+    companyId: companyId(),
+    scope: text("scope").notNull(),
+    categoryId: text("category_id").notNull().references(() => categories.id),
+    text: text("text").notNull(),
+    status: text("status").$type<ExplanationStatus>().notNull(),
+    citedTransactionIds: jsonb("cited_transaction_ids").$type<string[]>().notNull().default([]),
+    /** "claude" or "rules"; a person's edit keeps the draft's source for the record. */
+    source: text("source").$type<"claude" | "rules">().notNull(),
+    model: text("model"),
+    promptVersion: text("prompt_version").notNull(),
+    confidence: text("confidence").$type<"low" | "medium" | "high">().notNull(),
+    /** The variance when drafted, so a later change in the numbers can be flagged. */
+    draftedDeltaMinor: bigint("drafted_delta_minor", { mode: "number" }).notNull(),
+    draftedAt: timestamp("drafted_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedBy: uuid("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("explanations_line_idx").on(t.companyId, t.scope, t.categoryId)],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -299,4 +331,5 @@ export const TENANT_TABLES = [
   "connections",
   "sync_runs",
   "period_checks",
+  "explanations",
 ] as const;

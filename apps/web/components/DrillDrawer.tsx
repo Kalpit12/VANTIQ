@@ -15,7 +15,22 @@ import { EscToClose } from "./EscToClose";
  * URL params: `dc` category, `dp` program (or `none`), `dper` single period.
  * Lists the transactions behind the number; they always sum to it.
  */
-export function DrillDrawer({ ledger, sp, view, path }: { ledger: Ledger; sp: SearchParams; view: View; path: string }) {
+export function DrillDrawer({
+  ledger,
+  sp,
+  view,
+  path,
+  explanation,
+  cited,
+}: {
+  ledger: Ledger;
+  sp: SearchParams;
+  view: View;
+  path: string;
+  /** Shown above the transactions when the drawer is opened on a whole line for the view. */
+  explanation?: React.ReactNode;
+  cited?: string[];
+}) {
   const dc = one(sp, "dc");
   if (!dc) return null;
   let category;
@@ -34,6 +49,7 @@ export function DrillDrawer({ ledger, sp, view, path }: { ledger: Ledger; sp: Se
   const total = ledger.actual(filter);
   const vendors = new Map(ledger.data.vendors.map((v) => [v.id, v.name]));
   const programs = new Map(ledger.data.programs.map((p) => [p.id, p.code]));
+  const citedSet = new Set(!dp && !dper ? (cited ?? []) : []);
 
   const crumbs: string[] = [];
   for (let c: typeof category | null = category; c; c = c.parentId ? ledger.category(c.parentId) : null) crumbs.unshift(c.name);
@@ -70,6 +86,7 @@ export function DrillDrawer({ ledger, sp, view, path }: { ledger: Ledger; sp: Se
           </div>
         </div>
         <div className="flex-1 overflow-auto">
+          {!dp && !dper && explanation}
           <table className="num w-full text-[13px]">
             <thead className="sticky top-0 bg-subtle text-left text-[12px] text-ink-3">
               <tr>
@@ -82,10 +99,13 @@ export function DrillDrawer({ ledger, sp, view, path }: { ledger: Ledger; sp: Se
             </thead>
             <tbody>
               {txns.map((t) => (
-                <tr key={t.id} className="border-b border-line/70 align-top">
+                <tr key={t.id} id={`txn-${t.id}`} className={`scroll-mt-10 border-b border-line/70 align-top ${citedSet.has(t.id) ? "bg-accent-subtle/60" : ""}`}>
                   <td className="whitespace-nowrap px-5 py-2 text-ink-2">{formatDate(t.date)}</td>
                   <td className="py-2 pr-3">
-                    <div className="text-ink">{(t.vendorId && vendors.get(t.vendorId)) ?? "—"}</div>
+                    <div className="text-ink">
+                      {(t.vendorId && vendors.get(t.vendorId)) ?? "—"}
+                      {citedSet.has(t.id) && <span className="ml-2 rounded bg-accent-subtle px-1.5 py-px text-[11px] font-medium text-accent">Cited</span>}
+                    </div>
                     <div className="text-[12px] text-ink-3">{t.memo}</div>
                   </td>
                   <td className="py-2 pr-4 font-mono text-[12px] text-ink-2">{t.accountCode}</td>
