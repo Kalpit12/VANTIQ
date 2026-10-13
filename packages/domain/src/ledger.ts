@@ -160,18 +160,35 @@ export class Ledger {
     return this.data.cash.find((c) => c.period === period)?.balance ?? null;
   }
 
+  /** True once the company has at least one mapped transaction. */
+  hasData(): boolean {
+    return this.data.transactions.length > 0;
+  }
+
+  /** Latest month with actuals (falls back to cash data). */
   latestPeriod(): Period {
-    const periods = this.data.cash.map((c) => c.period).sort();
-    const last = periods[periods.length - 1];
-    if (!last) throw new Error("Ledger has no cash data");
-    return last;
+    return this.periodBounds()[1];
   }
 
   firstPeriod(): Period {
-    const periods = this.data.cash.map((c) => c.period).sort();
-    const first = periods[0];
-    if (!first) throw new Error("Ledger has no cash data");
-    return first;
+    return this.periodBounds()[0];
+  }
+
+  private bounds: [Period, Period] | null = null;
+
+  private periodBounds(): [Period, Period] {
+    if (this.bounds) return this.bounds;
+    let lo: Period | null = null;
+    let hi: Period | null = null;
+    const see = (p: Period) => {
+      if (lo === null || p < lo) lo = p;
+      if (hi === null || p > hi) hi = p;
+    };
+    for (const t of this.data.transactions) see(periodOfDate(t.date));
+    if (lo === null) for (const c of this.data.cash) see(c.period);
+    if (lo === null || hi === null) throw new Error("Ledger has no data");
+    this.bounds = [lo, hi];
+    return this.bounds;
   }
 
   private sum(map: Map<string, Cents>, f: Filter): Cents {

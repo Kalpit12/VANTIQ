@@ -13,13 +13,17 @@ import { BulletRows } from "@/components/charts/BulletRows";
 import { CashChart } from "@/components/charts/CashChart";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
-import { getLedger } from "@/lib/data";
+import { MappingBanner, NoData } from "@/components/NoData";
+import { getWorkspace } from "@/lib/data";
+import { can } from "@vantiq/db";
 import { cashProjection, findingTitle, materialLines, runwayAt, trendPoints, varianceFor } from "@/lib/metrics";
 import { href, resolveView, type SearchParams } from "@/lib/view";
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const ledger = getLedger();
+  const ws = await getWorkspace();
+  if (!ws.ledger.hasData()) return <NoData title="Overview" canImport={ws.mode === "db" && can.importData(ws.role)} />;
+  const ledger = ws.ledger;
   const view = resolveView(sp, ledger);
   const drill = (dc: string, extra: Record<string, string | null> = {}) => href("/", sp, { dc, dp: null, dper: null, ...extra });
 
@@ -42,22 +46,26 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       return {
         id: p.programId,
         label: prog ? prog.code : "Not assigned to a program",
-        sublabel: prog ? `${prog.therapeuticArea} · ${prog.phase}` : "Shared R&D costs",
+        sublabel: prog ? [prog.therapeuticArea, prog.phase].filter(Boolean).join(" · ") : "Shared R&D costs",
         variance: p.variance,
         href: drill("rd", { dp: p.programId === UNASSIGNED ? "none" : p.programId }),
       };
     });
+  const hasCash = ledger.data.cash.length > 0;
   const cash = cashProjection(ledger, view);
   const topProgram = programRows.filter((r) => r.variance.comparison > 0).sort((a, b) => Math.abs(b.variance.delta) - Math.abs(a.variance.delta))[0];
 
   return (
     <>
       <PageHeader title="Overview" subtitle={`${ledger.data.companyName} · ${view.label} · compared with budget`} />
+      <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard label="Revenue and income" value={formatCompactCurrency(income.actual)} variance={income} caption="vs budget" series={spark("rev")} href={drill("rev")} />
         <KpiCard label="Operating expenses" value={formatCompactCurrency(opex.actual)} variance={opex} caption="vs budget" series={spark("opex")} href={drill("opex")} />
         <KpiCard label="R&D spend" value={formatCompactCurrency(rd.actual)} variance={rd} caption="vs budget" series={spark("rd")} href={drill("rd")} />
+        {hasCash ? (
+        <>
         <KpiCard
           label="Cash balance"
           value={formatCompactCurrency(runway.cash)}
@@ -71,6 +79,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           series={view.trend.map((p) => runwayAt(ledger, p).months ?? 0)}
           tone={runway.months !== null && runway.months < 12 ? "warn" : undefined}
         />
+        </>
+        ) : (
+          <>
+            <KpiCard label="Cash balance" value="—" caption="Import month-end cash" series={[]} href={ws.mode === "db" ? "/import" : undefined} />
+            <KpiCard label="Runway" value="—" caption="Needs cash balances" series={[]} />
+          </>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -144,6 +159,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <BulletRows rows={programRows} />
         </ChartCard>
 
+        {hasCash ? (
         <ChartCard
           title={
             runway.months === null
@@ -164,6 +180,17 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         >
           <CashChart data={cash.data} today={cash.today} todayValue={cash.todayValue} zeroLabel={cash.zeroLabel} zeroText={cash.zeroText} events={cash.events} />
         </ChartCard>
+        ) : (
+          <Card className="flex flex-col justify-center p-5">
+            <h2 className="text-[15px] font-semibold text-ink">Add cash balances to see runway</h2>
+            <p className="mt-1 text-[13px] text-ink-2">Upload a file of month-end cash balances. Vantiq then charts cash and forecasts when it runs out at the current burn.</p>
+            {ws.mode === "db" && (
+              <Link href="/import" className="mt-3 text-[13px] font-medium text-accent hover:underline">
+                Import cash balances →
+              </Link>
+            )}
+          </Card>
+        )}
       </div>
 
       <DrillDrawer ledger={ledger} sp={sp} view={view} path="/" />

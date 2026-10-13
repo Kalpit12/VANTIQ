@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "pnpm --filter @vantiq/db migrate && next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "test": "echo 'web: covered by e2e (tests/e2e)'"
@@ -16,7 +16,9 @@
     "react": "19.1.9",
     "react-dom": "19.1.9",
     "recharts": "2.15.4",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "@vantiq/db": "workspace:*",
+    "@vantiq/integrations": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.18",

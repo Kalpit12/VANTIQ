@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Throwaway database inside the CI job: no password, local connections only.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://vantiq@localhost:5432/vantiq_test
+      E2E_DATABASE_URL: postgres://vantiq@localhost:5432/vantiq_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create non-superuser role and databases (superusers bypass row-level security)
+        run: |
+          psql -h localhost -U postgres -c "create role vantiq login"
+          for db in vantiq_test vantiq_e2e; do
+            psql -h localhost -U postgres -c "create database $db owner vantiq"
+            psql -h localhost -U postgres -d $db -c "alter schema public owner to vantiq"
+          done
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
