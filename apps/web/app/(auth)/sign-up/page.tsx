@@ -9,7 +9,7 @@ export const metadata = { title: "Create account · Vantiq Finance" };
 
 export default async function SignUpPage() {
   if (!dbEnabled()) return <DemoNotice />;
-  if ((await currentSession())?.company) redirect("/");
+  if ((await currentSession())?.company) redirect("/overview");
   return (
     <>
       <h1 className="mb-1 text-[20px] font-semibold text-ink">Create your account</h1>

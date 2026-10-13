@@ -4,7 +4,7 @@ const PASSWORD = "e2e-password-123";
 
 async function signUp(page: Page, company: string) {
   const email = `cfo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;
-  await page.goto("/");
+  await page.goto("/overview");
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.getByRole("link", { name: "Create an account" }).click();
   await page.getByLabel("Your name").fill("Casey CFO");
@@ -56,7 +56,7 @@ test("import a ledger file: check columns, skip bad rows, map the new account", 
   await page.getByLabel("Category for 6999 Miscellaneous").selectOption("ga-professional");
   await page.getByRole("button", { name: "Save 1 change" }).click();
   await expect(page.getByText(/Saved 1 account/)).toBeVisible();
-  await page.goto("/");
+  await page.goto("/overview");
   await expect(page.getByText("1 account not mapped.")).toHaveCount(0);
   await expect(page.getByText("$206k").first()).toBeVisible();
 

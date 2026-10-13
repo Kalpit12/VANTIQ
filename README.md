@@ -55,13 +55,14 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | --- | --- | --- |
 | 1. Foundation | Monorepo, finance math with tests, sample biotech data, Overview, Variances, R&D programs and Statements screens with charts C1–C9, drill-down drawer, light/dark mode, e2e smoke tests | Done |
 | 2. Data layer | PostgreSQL + Drizzle schema, tenant isolation, sign-in and roles, CSV/Excel import of ledger and budget, account mapping screen | Done |
-| 3. Accounting connections | Unified accounting API (QuickBooks Online, Xero, NetSuite), sync jobs, reconciliation check | Next |
-| 4. AI explanations | Claude-drafted variance explanations with cited transactions; accept, edit, reject | Planned |
-| 5. Review pack | Pack page, PDF export, audit log, settings; Phase 1 test gate | Planned |
+| 3. Landing page | Public page at `/` with an animated hero, live product mockup, features, how it works, security and sign-up calls to action; the app overview moves to `/overview` | Done |
+| 4. Accounting connections | Unified accounting API (QuickBooks Online, Xero, NetSuite), sync jobs, reconciliation check | Next |
+| 5. AI explanations | Claude-drafted variance explanations with cited transactions; accept, edit, reject | Planned |
+| 6. Review pack | Pack page, PDF export, audit log, settings; Phase 1 test gate | Planned |
 
 ### Milestone 2 decisions
 
 - **Sign-in** is email and password with server-side sessions (scrypt hashes, random tokens stored only as SHA-256, httpOnly cookies) instead of Auth.js. It has no extra service to configure. Google and Microsoft sign-in, email invites and password reset arrive with the notifications work; until then an admin adds people with a one-time temporary password.
 - **Tenant isolation** uses Postgres row-level security, forced on every tenant table, plus application checks. Tests try cross-company reads and writes on every tenant table.
-- **Mapping suggestions** are keyword and account-range rules for now; Claude-drafted suggestions come with milestone 4. Suggested mappings count in the numbers right away and are flagged until someone confirms them.
+- **Mapping suggestions** are keyword and account-range rules for now; Claude-drafted suggestions come with milestone 5. Suggested mappings count in the numbers right away and are flagged until someone confirms them.
 - **Budgets** are imported by account (and optionally program) and replace the months a file covers. Ledger imports are deduplicated by row content, so re-uploading a file is safe.

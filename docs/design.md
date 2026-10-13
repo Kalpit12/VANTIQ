@@ -315,7 +315,16 @@ Goal: a small biotech can replace its Excel monthly review pack.
 
 **8. Settings**: company, connections, account mapping, programs, users (Admin, Finance, Viewer).
 
+**9. Landing page** (public, at `/`)
+- The one place Vantiq is allowed to be expressive. The app stays calm; the landing page sells it.
+- One deliberate dark, cinematic look for the whole page (it ignores the app's light/dark toggle), one type family (Inter, display weights with tight tracking), and the brand teal as the only accent, with a teal-to-blue gradient for one emphasised phrase per headline. Mono appears only inside product mockups.
+- Hero: a slowly drifting molecule lattice (nodes and bonds that brighten near the pointer), a teal aurora and pointer light. The headline "Every dollar, traced to the molecule." slides up line by line. Below it, a live-drawn imitation of the Overview (KPIs count up, the cash line draws, the forecast runs to the zero-cash date, program bars grow, an AI note types itself) sits inside a rotating light-beam border on a tilted stage over a glowing horizon; it flattens as the page scrolls.
+- Sections: ledger marquee → "The gap" statement that lights up word by word on scroll, with ledger lines turning into programs and phases → four-step product showcase with a sticky visual that swaps as you scroll (bring your books, confirm the mapping, run the review, defend the runway) → feature bento with pointer-lit borders → product numbers → security with an orbit visual → FAQ → closing call to action over a horizon glow → footer.
+- Only real product facts and the Helixa sample numbers. No invented customers, logos, testimonials or usage statistics.
+- Every animation respects reduced motion, content is visible without scripts, and the molecule field pauses off screen.
+
 Phase 1 design acceptance checks:
+- [ ] Landing page: no horizontal scroll at 390px; content readable with reduced motion and without scripts; calls to action reach the demo and sign-up.
 - [ ] Every number on Overview, Variances, Statements and R&D opens the drill-down drawer.
 - [ ] Numbers use tabular figures and follow section 4 formatting in all tables.
 - [ ] Favorable/unfavorable colors are correct for both revenue and expense lines.

@@ -25,7 +25,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   if (!ws.ledger.hasData()) return <NoData title="Overview" canImport={ws.mode === "db" && can.importData(ws.role)} />;
   const ledger = ws.ledger;
   const view = resolveView(sp, ledger);
-  const drill = (dc: string, extra: Record<string, string | null> = {}) => href("/", sp, { dc, dp: null, dper: null, ...extra });
+  const drill = (dc: string, extra: Record<string, string | null> = {}) => href("/overview", sp, { dc, dp: null, dper: null, ...extra });
 
   const income = varianceFor(ledger, view.periods, "rev");
   const opex = varianceFor(ledger, view.periods, "opex");
@@ -193,7 +193,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         )}
       </div>
 
-      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/" />
+      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/overview" />
     </>
   );
 }

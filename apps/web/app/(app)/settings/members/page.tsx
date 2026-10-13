@@ -18,7 +18,7 @@ const ROLE_TEXT = {
 export default async function MembersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const ws = await getWorkspace();
-  if (ws.mode === "demo" || !can.manageMembers(ws.role)) redirect("/");
+  if (ws.mode === "demo" || !can.manageMembers(ws.role)) redirect("/overview");
   const members = await listMembers(getDb(), ws.companyId!);
   const error = one(sp, "error");
   return (

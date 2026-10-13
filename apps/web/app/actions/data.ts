@@ -75,7 +75,7 @@ export async function loadSampleAction() {
   if (await hasAnyData(db, companyId)) redirect("/import?error=not-empty");
   await loadSampleData(db, companyId, userId);
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/overview");
 }
 
 export async function saveMappingsAction(changes: { accountId: string; categoryId: string | null; excluded: boolean }[]) {

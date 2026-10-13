@@ -249,6 +249,7 @@ Scope:
 - Programs and program tagging.
 - Period balances, budget import, variance engine.
 - Screens: Onboarding, Overview, Variances, Statements, R&D by program, Review pack (PDF), Drill-down, Settings.
+- Public landing page at `/` (the app overview lives at `/overview`).
 - AI variance explanations (draft, accept, edit).
 - Audit log.
 
