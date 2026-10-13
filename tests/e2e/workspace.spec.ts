@@ -133,3 +133,32 @@ test("connect the sandbox accounting system, sync, and see every month balance",
   await page.getByRole("link", { name: "Overview" }).click();
   await expect(page.getByText("$59.6M", { exact: true })).toBeVisible();
 });
+
+test("draft explanations, then accept one and edit another", async ({ page }) => {
+  await signUp(page, "Explain Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("link", { name: "Variances" }).click();
+  await page.getByRole("button", { name: /^Draft \d+ explanations?$/ }).click();
+  await expect(page.getByRole("button", { name: /^Draft \d+ explanations?$/ })).toHaveCount(0);
+
+  const table = page.getByRole("table").last();
+  await table.getByRole("link", { name: /HX-101 ran/ }).click();
+  const block = page.getByRole("dialog").getByRole("region", { name: "Explanation" });
+  await expect(block.getByText("Auto draft")).toBeVisible();
+  await block.getByRole("button", { name: "Accept" }).click();
+  await expect(block.getByText("Confirmed by Casey CFO")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await table.getByRole("link", { name: /Harbor Legal/ }).click();
+  await block.getByText("Edit", { exact: true }).click();
+  await block.getByLabel("Explanation").fill("Harbor Legal reviewed the licensing term sheet; a one-off cost.");
+  await block.getByRole("button", { name: "Save and confirm" }).click();
+  await expect(block.getByText("Edited and confirmed by Casey CFO")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByText("Harbor Legal reviewed the licensing term sheet; a one-off cost.")).toBeVisible();
+  await expect(page.getByText("Confirmed")).toHaveCount(2);
+});

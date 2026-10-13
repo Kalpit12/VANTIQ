@@ -19,6 +19,10 @@ import {
   openConnector,
   connections,
   listDueConnections,
+  decideExplanation,
+  listExplanations,
+  saveDrafts,
+  scopeOf,
   listPeriodChecks,
   listSyncRuns,
   runSync,
@@ -286,6 +290,39 @@ describe("connected accounting system", () => {
     const [row] = await withCompany(db, d.companyId, (tx) => tx.execute<{ t: string }>(sql`select account_token_enc as t from connections`));
     expect(row!.t).not.toContain("acct-token-123");
     expect(decryptSecret(row!.t)).toBe("acct-token-123");
+  });
+});
+
+describe("variance explanations", () => {
+  const draft = (categoryId: string, text: string) => ({ categoryId, text, citedTransactionIds: ["t1"], source: "rules" as const, confidence: "medium" as const, promptVersion: "test/1", deltaMinor: 42_000_00 });
+
+  it("stores drafts per line and view, then records a person's decision", async () => {
+    const a = await freshCompany("Explain Co");
+    expect(scopeOf(["2026-09"])).toBe("2026-09");
+    expect(scopeOf(["2026-01", "2026-02", "2026-03"])).toBe("2026-01..2026-03");
+    expect(await saveDrafts(db, a.companyId, a.userId, ["2026-09"], [draft("rd-cro", "First draft."), draft("rd-cmc", "CMC draft.")])).toBe(2);
+    let list = await listExplanations(db, a.companyId, ["2026-09"]);
+    expect(list.get("rd-cro")).toMatchObject({ status: "ai_draft", text: "First draft.", citedTransactionIds: ["t1"] });
+    expect((await listExplanations(db, a.companyId, ["2026-08"])).size).toBe(0);
+
+    await decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cro", { action: "edit", text: "  Meridian billed two new sites early.  " });
+    await decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cmc", { action: "reject" });
+    list = await listExplanations(db, a.companyId, ["2026-09"]);
+    expect(list.get("rd-cro")).toMatchObject({ status: "edited", text: "Meridian billed two new sites early.", decidedByName: "Explain Co CFO" });
+    expect(list.get("rd-cmc")?.status).toBe("rejected");
+
+    // Drafting again leaves decided lines alone, unless asked to replace them.
+    await saveDrafts(db, a.companyId, a.userId, ["2026-09"], [draft("rd-cro", "Second draft."), draft("rd-cmc", "CMC again.")]);
+    list = await listExplanations(db, a.companyId, ["2026-09"]);
+    expect(list.get("rd-cro")?.text).toBe("Meridian billed two new sites early.");
+    expect(list.get("rd-cmc")).toMatchObject({ status: "ai_draft", text: "CMC again." });
+    await saveDrafts(db, a.companyId, a.userId, ["2026-09"], [draft("rd-cro", "Third draft.")], true);
+    expect((await listExplanations(db, a.companyId, ["2026-09"])).get("rd-cro")).toMatchObject({ status: "ai_draft", text: "Third draft.", decidedByName: null });
+
+    await expect(decideExplanation(db, a.companyId, a.userId, ["2026-09"], "ga-people", { action: "accept" })).rejects.toThrow(/no draft/);
+    await expect(decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cro", { action: "edit", text: " " })).rejects.toThrow(/1,200/);
+    const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events order by at`));
+    expect(audit.map((r) => r.action)).toEqual(expect.arrayContaining(["explanation.draft", "explanation.edit", "explanation.reject"]));
   });
 });
 

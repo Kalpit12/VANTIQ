@@ -10,15 +10,16 @@
     "test": "echo 'web: covered by e2e (tests/e2e)'"
   },
   "dependencies": {
+    "@vantiq/ai": "workspace:*",
+    "@vantiq/db": "workspace:*",
     "@vantiq/domain": "workspace:*",
     "@vantiq/fixtures": "workspace:*",
+    "@vantiq/integrations": "workspace:*",
     "next": "15.5.27",
     "react": "19.1.9",
     "react-dom": "19.1.9",
     "recharts": "2.15.4",
-    "server-only": "0.0.1",
-    "@vantiq/db": "workspace:*",
-    "@vantiq/integrations": "workspace:*"
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.18",

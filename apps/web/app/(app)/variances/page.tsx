@@ -17,7 +17,12 @@ import { MappingBanner, NoData } from "@/components/NoData";
 import { getWorkspace } from "@/lib/data";
 import { can } from "@vantiq/db";
 import { findingTitle, varianceFor } from "@/lib/metrics";
-import { href, resolveView, type SearchParams } from "@/lib/view";
+import { href, one, resolveView, type SearchParams } from "@/lib/view";
+import { draftExplanationsAction } from "@/app/actions/explanations";
+import { SubmitButton } from "@/components/AuthForm";
+import { ExplanationBlock } from "@/components/ExplanationBlock";
+import { ExplanationCell } from "@/components/ExplanationCell";
+import { explanationsFor, materialCategoryIds } from "@/lib/explanations";
 
 export default async function VariancesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -38,6 +43,12 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
   );
   const biggest = [...opexLeaves].sort((a, b) => Math.abs(b.variance.delta) - Math.abs(a.variance.delta))[0];
   const material = rows.filter((r) => !r.hasChildren && isMaterial(r.variance));
+  const expl = await explanationsFor(ws, view.periods);
+  const canExplain = ws.mode === "db" && can.explain(ws.role);
+  const missing = materialCategoryIds(ledger, view.periods).filter((id) => !expl.has(id));
+  const back = href("/variances", sp, { xerr: null });
+  const dc = one(sp, "dc");
+  const dcLeaf = dc && rows.some((r) => r.category.id === dc && !r.hasChildren) ? dc : null;
   const bulletRows = opexLeaves
     .filter((r) => r.variance.actual !== 0 || r.variance.comparison !== 0)
     .sort((a, b) => b.variance.actual - a.variance.actual)
@@ -54,7 +65,16 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title="Variances"
         subtitle={`Budget vs actual · ${view.label} · ${material.length} material line${material.length === 1 ? "" : "s"} (over ±${DEFAULT_THRESHOLDS.pct * 100}% and ±${formatCompactCurrency(DEFAULT_THRESHOLDS.abs)}, whichever is larger)`}
-      />
+      >
+        {canExplain && missing.length > 0 && (
+          <form action={draftExplanationsAction}>
+            <input type="hidden" name="period" value={view.period} />
+            <input type="hidden" name="mode" value={view.mode} />
+            <input type="hidden" name="back" value={back} />
+            <SubmitButton label={`Draft ${missing.length} explanation${missing.length === 1 ? "" : "s"}`} pendingLabel="Drafting…" />
+          </form>
+        )}
+      </PageHeader>
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-5">
@@ -126,7 +146,7 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
                     </td>
                     <td className="px-3 py-2 text-right">{r.variance.comparison === 0 ? <span className="text-ink-3">—</span> : <VarianceChip v={r.variance} />}</td>
                     <td className="px-5 py-2">
-                      {mat ? <StatusPill tone="warn">Needs explanation</StatusPill> : <span className="text-ink-3">–</span>}
+                      <ExplanationCell row={expl.get(r.category.id)} material={mat} href={drill(r.category.id)} />
                     </td>
                   </tr>
                 );
@@ -135,11 +155,18 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
           </table>
         </div>
       </Card>
-      <p className="mt-3 text-[12px] text-ink-3">
-        AI-drafted explanations for each material line arrive in the next milestone; owners will confirm or edit them here.
-      </p>
-
-      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/variances" />
+      <DrillDrawer
+        ledger={ledger}
+        sp={sp}
+        view={view}
+        path="/variances"
+        cited={dcLeaf ? expl.get(dcLeaf)?.citedTransactionIds : undefined}
+        explanation={
+          dcLeaf && (expl.has(dcLeaf) || material.some((r) => r.category.id === dcLeaf)) ? (
+            <ExplanationBlock row={expl.get(dcLeaf)} ledger={ledger} categoryId={dcLeaf} view={view} back={back} canEdit={canExplain} demo={ws.mode === "demo"} error={one(sp, "xerr")} />
+          ) : undefined
+        }
+      />
     </>
   );
 }
