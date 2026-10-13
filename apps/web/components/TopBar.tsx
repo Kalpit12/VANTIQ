@@ -4,13 +4,25 @@ import { periodLabel, periodRange } from "@vantiq/domain";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function TopBar({ companyName, firstPeriod, latestPeriod }: { companyName: string; firstPeriod: string; latestPeriod: string }) {
+export function TopBar({
+  companyName,
+  sample,
+  firstPeriod,
+  latestPeriod,
+}: {
+  companyName: string;
+  sample: boolean;
+  firstPeriod: string | null;
+  latestPeriod: string | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const period = sp.get("period") ?? latestPeriod;
+  const period = sp.get("period") ?? latestPeriod ?? "";
   const mode = sp.get("mode") === "ytd" ? "ytd" : "month";
-  const periods = periodRange(firstPeriod, latestPeriod).reverse();
+  const periods = firstPeriod && latestPeriod ? periodRange(firstPeriod, latestPeriod).reverse() : [];
+  // Period controls only apply to the review screens.
+  const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings)/.test(pathname);
 
   const go = (changes: Record<string, string>) => {
     const q = new URLSearchParams(sp.toString());
@@ -23,8 +35,9 @@ export function TopBar({ companyName, firstPeriod, latestPeriod }: { companyName
     <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-line bg-surface/95 px-6 backdrop-blur">
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold text-ink">{companyName}</span>
-        <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">Sample data</span>
+        {sample && <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">Sample data</span>}
       </div>
+      {showPeriod && (
       <div className="ml-4 flex items-center gap-2">
         <label className="sr-only" htmlFor="period">
           Period
@@ -56,8 +69,9 @@ export function TopBar({ companyName, firstPeriod, latestPeriod }: { companyName
         </div>
         <span className="text-[13px] text-ink-3">vs Budget</span>
       </div>
+      )}
       <div className="ml-auto flex items-center gap-3">
-        <span className="hidden text-[12px] text-ink-3 lg:inline">Synced from sample ledger</span>
+        {sample && <span className="hidden text-[12px] text-ink-3 lg:inline">Demo mode: built-in sample ledger</span>}
         <ThemeToggle />
       </div>
     </header>

@@ -22,6 +22,10 @@ export async function migrateDb(url = process.env.DATABASE_URL) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  if (!process.env.DATABASE_URL) {
+    console.log("DATABASE_URL is not set: skipping migrations (the app runs in demo mode).");
+    process.exit(0);
+  }
   migrateDb()
     .then(() => console.log("Database is up to date."))
     .catch((e) => {

@@ -11,7 +11,9 @@ import { DrillDrawer } from "@/components/DrillDrawer";
 import { MixChart } from "@/components/charts/MixChart";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader, VarianceChip } from "@/components/ui";
-import { getLedger } from "@/lib/data";
+import { MappingBanner, NoData } from "@/components/NoData";
+import { getWorkspace } from "@/lib/data";
+import { can } from "@vantiq/db";
 import { varianceFor } from "@/lib/metrics";
 import { href, one, resolveView, type SearchParams } from "@/lib/view";
 
@@ -19,7 +21,9 @@ const SLOTS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--s
 
 export default async function ProgramsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const ledger = getLedger();
+  const ws = await getWorkspace();
+  if (!ws.ledger.hasData()) return <NoData title="R&D programs" canImport={ws.mode === "db" && can.importData(ws.role)} />;
+  const ledger = ws.ledger;
   const view = resolveView(sp, ledger);
   const programs = ledger.data.programs;
   const selected = programs.find((p) => p.id === one(sp, "program")) ?? null;
@@ -51,6 +55,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="R&D programs" subtitle={`R&D spend by program · ${view.label} · compared with budget`} />
+      <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {programs.map((p, i) => {
@@ -69,7 +74,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
                   <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: SLOTS[i] }} aria-hidden />
                   {p.code}
                 </span>
-                <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">{p.phase}</span>
+                {p.phase && <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">{p.phase}</span>}
               </div>
               <p className="mt-0.5 text-[12px] text-ink-3">{p.therapeuticArea}</p>
               <p className="num mt-3 text-[24px] font-semibold text-ink">{formatCompactCurrency(v.actual)}</p>
@@ -131,7 +136,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
               </tr>
             </thead>
             <tbody>
-              {[...programs.map((p) => ({ id: p.id, label: `${p.code} · ${p.therapeuticArea}` })), { id: UNASSIGNED, label: "Not assigned to a program" }].map((row) => {
+              {[...programs.map((p) => ({ id: p.id, label: [p.code, p.therapeuticArea].filter(Boolean).join(" · ") })), { id: UNASSIGNED, label: "Not assigned to a program" }].map((row) => {
                 const programId = row.id === UNASSIGNED ? null : row.id;
                 const dp = row.id === UNASSIGNED ? "none" : row.id;
                 const v = varianceFor(ledger, view.periods, "rd", programId);

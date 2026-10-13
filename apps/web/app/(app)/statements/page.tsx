@@ -4,13 +4,17 @@ import { ChartCard } from "@/components/ChartCard";
 import { DrillDrawer } from "@/components/DrillDrawer";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader } from "@/components/ui";
-import { getLedger } from "@/lib/data";
+import { MappingBanner, NoData } from "@/components/NoData";
+import { getWorkspace } from "@/lib/data";
+import { can } from "@vantiq/db";
 import { trendPoints } from "@/lib/metrics";
 import { href, resolveView, type SearchParams } from "@/lib/view";
 
 export default async function StatementsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const ledger = getLedger();
+  const ws = await getWorkspace();
+  if (!ws.ledger.hasData()) return <NoData title="Statements" canImport={ws.mode === "db" && can.importData(ws.role)} />;
+  const ledger = ws.ledger;
   const view = resolveView(sp, ledger);
   const months = view.trend.slice(-6);
   const rows = ledger.tree(view.periods);
@@ -34,6 +38,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   return (
     <>
       <PageHeader title="Statements" subtitle={`Income statement · last 6 months and ${view.label} · USD thousands, negatives in parentheses`} />
+      <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {multiples.map((m) => (

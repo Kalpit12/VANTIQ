@@ -18,6 +18,7 @@ export function Card({ children, className = "" }: { children: React.ReactNode; 
 
 /** Arrow + signed % in favorable/unfavorable color. Never color alone (design.md 3.1). */
 export function VarianceChip({ v, size = "sm" }: { v: Variance; size?: "sm" | "md" }) {
+  if (v.comparison === 0 && v.actual !== 0) return <span className={`text-ink-3 ${size === "md" ? "text-[13px]" : "text-[12px]"}`}>No budget</span>;
   if (v.delta === 0) return <span className="num text-ink-3">0.0%</span>;
   const up = v.delta > 0;
   const color = v.favorable ? "text-good" : "text-bad";

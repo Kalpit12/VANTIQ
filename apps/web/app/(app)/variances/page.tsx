@@ -13,13 +13,17 @@ import { DrillDrawer } from "@/components/DrillDrawer";
 import { BulletRows } from "@/components/charts/BulletRows";
 import { VarianceBridge } from "@/components/charts/VarianceBridge";
 import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
-import { getLedger } from "@/lib/data";
+import { MappingBanner, NoData } from "@/components/NoData";
+import { getWorkspace } from "@/lib/data";
+import { can } from "@vantiq/db";
 import { findingTitle, varianceFor } from "@/lib/metrics";
 import { href, resolveView, type SearchParams } from "@/lib/view";
 
 export default async function VariancesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const ledger = getLedger();
+  const ws = await getWorkspace();
+  if (!ws.ledger.hasData()) return <NoData title="Variances" canImport={ws.mode === "db" && can.importData(ws.role)} />;
+  const ledger = ws.ledger;
   const view = resolveView(sp, ledger);
   const drill = (dc: string) => href("/variances", sp, { dc, dp: null, dper: null });
 
@@ -51,6 +55,7 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
         title="Variances"
         subtitle={`Budget vs actual · ${view.label} · ${material.length} material line${material.length === 1 ? "" : "s"} (over ±${DEFAULT_THRESHOLDS.pct * 100}% and ±${formatCompactCurrency(DEFAULT_THRESHOLDS.abs)}, whichever is larger)`}
       />
+      <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-5">
         <ChartCard

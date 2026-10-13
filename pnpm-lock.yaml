@@ -17,12 +17,18 @@ importers:
 
   apps/web:
     dependencies:
+      '@vantiq/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@vantiq/domain':
         specifier: workspace:*
         version: link:../../packages/domain
       '@vantiq/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures
+      '@vantiq/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       next:
         specifier: 15.5.27
         version: 15.5.27(@playwright/test@1.56.0)(@types/node@22.15.3)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
