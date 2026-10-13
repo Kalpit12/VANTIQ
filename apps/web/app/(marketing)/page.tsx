@@ -1,27 +1,79 @@
 import Link from "next/link";
 import { ProductWindow } from "@/components/landing/ProductWindow";
-import { HeroStage, InView, NavShell, Reveal, SpotlightGroup } from "@/components/landing/motion";
+import { ConnectVisual, MapVisual, ReviewVisual, RunwayVisual } from "@/components/landing/Visuals";
+import {
+  CountUp,
+  HeroStage,
+  InView,
+  MoleculeField,
+  NavShell,
+  Reveal,
+  ScrollWords,
+  Showcase,
+  SpotlightGroup,
+} from "@/components/landing/motion";
 
 const LEDGERS = ["QuickBooks Online", "Xero", "NetSuite", "Sage Intacct", "CSV", "Excel"];
 
-const HEADLINE = ["Every", "dollar,", "traced", "to", "the"];
+const STATEMENT =
+  "Your ledger says *Professional *services, *$412,500. Your board asks which trial, which phase, and how long the cash lasts. Vantiq answers *all *three before the meeting starts.";
+
+const FAQ = [
+  [
+    "Who is Vantiq for?",
+    "Finance teams at biotech and pharma companies, from a 50-person biotech with one controller to mid-size firms with several programs in the clinic.",
+  ],
+  [
+    "Do we have to change accounting systems?",
+    "No. Vantiq reads the books you already keep. CSV and Excel uploads work today, and direct connections to QuickBooks Online, Xero, NetSuite and Sage Intacct are next on the roadmap.",
+  ],
+  [
+    "How long does setup take?",
+    "Upload a ledger, a budget and month-end cash, confirm the suggested account mapping, and the review is ready. Re-uploading a file never double counts.",
+  ],
+  [
+    "How is our data kept separate from other companies?",
+    "Every company's rows are walled off by row-level security in the database itself, on top of the checks in the app. Sessions are stored only as hashes and every change is logged.",
+  ],
+  [
+    "Where does the AI come in?",
+    "It drafts short explanations for material variances and suggests account mappings. Every draft is labelled, cites the transactions it used, and is confirmed by a person before anyone else sees it.",
+  ],
+];
+
+function Arrow() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden>
+      <path d="M3 8h10M9 4l4 4-4 4" />
+    </svg>
+  );
+}
+
+function Mark({ small = false }: { small?: boolean }) {
+  return (
+    <span className={small ? "lp-mark lp-mark-sm" : "lp-mark"}>
+      vant
+      <span className="lp-mark-i">
+        ı<span aria-hidden />
+      </span>
+      q
+    </span>
+  );
+}
 
 export default function LandingPage() {
   return (
     <main className="lp-page">
       <NavShell>
         <div className="lp-nav-inner">
-          <Link href="/" className="lp-mark" aria-label="Vantiq home">
-            vant
-            <span className="lp-mark-i">
-              ı<span aria-hidden />
-            </span>
-            q
+          <Link href="/" aria-label="Vantiq home">
+            <Mark />
           </Link>
           <nav aria-label="Sections" className="lp-nav-links">
             <a href="#product">Product</a>
-            <a href="#how">How it works</a>
+            <a href="#features">Features</a>
             <a href="#security">Security</a>
+            <a href="#faq">FAQ</a>
           </nav>
           <div className="lp-nav-cta">
             <Link href="/sign-in" className="lp-nav-signin">
@@ -34,54 +86,61 @@ export default function LandingPage() {
         </div>
       </NavShell>
 
-      {/* Hero */}
+      {/* ---------- Hero ---------- */}
       <HeroStage className="lp-hero">
+        <MoleculeField className="lp-field" />
         <div className="lp-aurora" aria-hidden>
           <span />
           <span />
           <span />
         </div>
-        <div className="lp-hero-grid" aria-hidden />
         <div className="lp-hero-spot" aria-hidden />
         <div className="lp-grain" aria-hidden />
 
         <div className="lp-hero-copy">
-          <p className="lp-badge">
-            <span className="lp-badge-dot" />
-            Finance review, built only for pharma and biotech
-          </p>
+          <Link href="/overview" className="lp-badge">
+            <span className="lp-badge-tag">New</span>
+            Account mapping and file import are live
+            <Arrow />
+          </Link>
           <h1 className="lp-h1">
-            {HEADLINE.map((w, i) => (
-              <span key={w + i} className="lp-word" style={{ "--i": i } as React.CSSProperties}>
-                {w}{" "}
+            <span className="lp-h1-line">
+              <span className="lp-word" style={{ "--i": 0 } as React.CSSProperties}>
+                Every dollar,
               </span>
-            ))}
-            <span className="lp-word lp-serif" style={{ "--i": HEADLINE.length } as React.CSSProperties}>
-              molecule.
+            </span>
+            <span className="lp-h1-line">
+              <span className="lp-word" style={{ "--i": 1 } as React.CSSProperties}>
+                traced to <span className="lp-glow-text">the molecule.</span>
+              </span>
             </span>
           </h1>
           <p className="lp-sub">
-            Vantiq turns your general ledger into a monthly review that speaks R&amp;D: budget versus actual by program and
-            trial phase, CRO spend you can trace to the invoice, and a runway your board will believe.
+            The finance review built only for pharma and biotech. Budget versus actual by program and trial phase, CRO
+            spend traced to the invoice, and a runway your board will believe.
           </p>
           <div className="lp-ctas">
             <Link href="/overview" className="lp-btn">
               Open the live demo
-              <svg viewBox="0 0 16 16" aria-hidden>
-                <path d="M3 8h10M9 4l4 4-4 4" />
-              </svg>
+              <Arrow />
             </Link>
             <Link href="/sign-up" className="lp-btn-ghost">
               Create your workspace
             </Link>
           </div>
-          <p className="lp-hero-foot">Reads QuickBooks Online, Xero, NetSuite and Sage Intacct. CSV and Excel work today.</p>
+          <ul className="lp-hero-points" aria-label="Highlights">
+            <li>Live in an afternoon</li>
+            <li>Reads your existing ledger</li>
+            <li>Every AI note cites its source</li>
+          </ul>
         </div>
 
         <div className="lp-stage">
-          <div className="lp-stage-glow" aria-hidden />
+          <div className="lp-horizon" aria-hidden />
           <div className="lp-tilt">
-            <ProductWindow />
+            <div className="lp-beam">
+              <ProductWindow />
+            </div>
             <div className="lp-float lp-float-a" aria-hidden>
               <span className="lp-float-icon">✓</span>
               <div>
@@ -99,7 +158,7 @@ export default function LandingPage() {
         </div>
       </HeroStage>
 
-      {/* Ledgers */}
+      {/* ---------- Ledgers ---------- */}
       <section className="lp-ledgers" aria-label="Accounting systems">
         <p>Works on top of the books you already keep</p>
         <div className="lp-marquee">
@@ -113,23 +172,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Problem to answer */}
-      <section className="lp-section lp-translate">
-        <Reveal className="lp-translate-copy">
-          <p className="lp-eyebrow">The gap</p>
-          <h2 className="lp-h2">
-            Your ledger says <span className="lp-mono-q">Professional services</span>. Your board asks{" "}
-            <em className="lp-serif">which trial.</em>
-          </h2>
-          <p className="lp-body">
-            Generic FP&amp;A tools stop at the chart of accounts. Vantiq maps every line to the program, phase and
-            vendor it paid for, so the question after the number already has an answer.
-          </p>
-        </Reveal>
+      {/* ---------- Statement ---------- */}
+      <section className="lp-statement" aria-label="Why Vantiq">
+        <p className="lp-eyebrow">The gap</p>
+        <ScrollWords text={STATEMENT} className="lp-statement-text" />
         <InView className="lp-ledger-card">
           <div className="lp-ledger-head">
             <span>General ledger · Sep 2026</span>
-            <span className="lp-ledger-arrow">In Vantiq</span>
+            <span className="lp-ledger-arrow">Seen by Vantiq</span>
           </div>
           {[
             ["6110", "Professional services", "$412,500", "HX-101", "Phase 2 · CRO"],
@@ -151,20 +201,77 @@ export default function LandingPage() {
         </InView>
       </section>
 
-      {/* Features */}
+      {/* ---------- Showcase ---------- */}
       <section id="product" className="lp-section">
-        <Reveal className="lp-section-head">
+        <Reveal className="lp-section-head lp-center">
           <p className="lp-eyebrow">Product</p>
-          <h2 className="lp-h2">Everything the monthly review needs. Nothing it doesn&apos;t.</h2>
+          <h2 className="lp-h2">
+            From raw ledger to <span className="lp-glow-text">board-ready</span> in one sitting.
+          </h2>
+          <p className="lp-lead">Four steps, one workspace. No spreadsheets passed around the night before the meeting.</p>
+        </Reveal>
+        <Showcase
+          steps={[
+            {
+              key: "connect",
+              eyebrow: "Bring your books",
+              title: "Your ledger, budget and cash in one place.",
+              body: "Upload exports from the system you already use. Vantiq checks every column, skips bad rows with a reason, and never double counts a re-upload.",
+              visual: <ConnectVisual />,
+            },
+            {
+              key: "map",
+              eyebrow: "Confirm the mapping",
+              title: "Every account lands in the right bucket.",
+              body: "Vantiq suggests a category for each account in pharma terms: clinical, CMC, lab, G&A. You confirm with one click and the numbers update everywhere.",
+              visual: <MapVisual />,
+            },
+            {
+              key: "review",
+              eyebrow: "Run the review",
+              title: "Variances that explain themselves.",
+              body: "Material variances are flagged automatically, each with a short AI-drafted note that cites its transactions. Accept, edit or reject it before the meeting.",
+              visual: <ReviewVisual />,
+            },
+            {
+              key: "runway",
+              eyebrow: "Defend the runway",
+              title: "A cash date you can stand behind.",
+              body: "Cash at every month end, funding events on the line, and the month it runs out at today's burn, with a band for spending a little faster or slower.",
+              visual: <RunwayVisual />,
+            },
+          ]}
+        />
+      </section>
+
+      {/* ---------- Bento ---------- */}
+      <section id="features" className="lp-section">
+        <Reveal className="lp-section-head">
+          <p className="lp-eyebrow">Features</p>
+          <h2 className="lp-h2">Built for how biotech finance actually works.</h2>
         </Reveal>
         <SpotlightGroup className="lp-bento">
-          <Reveal className="lp-cell lp-cell-wide" delay={0}>
+          <Reveal className="lp-cell lp-cell-wide">
             <div data-spot className="lp-cell-in">
               <div className="lp-cell-copy">
-                <h3>A runway you can defend</h3>
-                <p>Cash at every month end, the date it runs out at today&apos;s burn, and funding events on the line.</p>
+                <h3>Programs and phases, natively</h3>
+                <p>Spend by molecule and trial phase, not by custom tags bolted onto generic accounts.</p>
               </div>
-              <RunwayMini />
+              <InView className="lp-phase">
+                {[
+                  ["HX-101", "Solid tumors · Phase 2", 0.86, "$1.71M"],
+                  ["HX-204", "Lupus · Phase 1", 0.54, "$1.06M"],
+                  ["HX-310", "Discovery", 0.28, "$0.55M"],
+                ].map(([n, p, w, amt], i) => (
+                  <div key={n as string} style={{ "--i": i, "--w": w } as React.CSSProperties}>
+                    <span>
+                      <b>{n}</b> {p}
+                    </span>
+                    <span className="lp-phase-amt num">{amt}</span>
+                    <i />
+                  </div>
+                ))}
+              </InView>
             </div>
           </Reveal>
           <Reveal className="lp-cell" delay={80}>
@@ -182,47 +289,52 @@ export default function LandingPage() {
               </InView>
             </div>
           </Reveal>
-          <Reveal className="lp-cell" delay={0}>
+          <Reveal className="lp-cell">
             <div data-spot className="lp-cell-in">
               <div className="lp-cell-copy">
-                <h3>Variances that explain themselves</h3>
-                <p>A short note on every material variance, drafted by AI, labelled as such, and confirmed by a person.</p>
+                <h3>Roles that fit finance</h3>
+                <p>Admins manage, finance edits, viewers read. Nobody changes a number by accident.</p>
               </div>
-              <div className="lp-mini-note">
-                <p>
-                  <span>AI draft</span> Confirmed by Dana O.
-                </p>
-                <p>HX-204 supply came in $8k under plan after Kestrel moved one batch to October.</p>
+              <div className="lp-roles">
+                {[
+                  ["KP", "Admin"],
+                  ["DO", "Finance"],
+                  ["MR", "Viewer"],
+                ].map(([i, r]) => (
+                  <span key={r}>
+                    <i>{i}</i>
+                    {r}
+                  </span>
+                ))}
               </div>
             </div>
           </Reveal>
           <Reveal className="lp-cell" delay={80}>
             <div data-spot className="lp-cell-in">
               <div className="lp-cell-copy">
-                <h3>Programs and phases, natively</h3>
-                <p>Spend by molecule and trial phase, not by custom tags bolted onto generic accounts.</p>
+                <h3>Statements in one click</h3>
+                <p>Income statement, balance sheet and cash flow by month or year to date.</p>
               </div>
-              <InView className="lp-phase">
+              <div className="lp-stmt">
                 {[
-                  ["HX-101", "Phase 2", 0.86],
-                  ["HX-204", "Phase 1", 0.54],
-                  ["HX-310", "Discovery", 0.28],
-                ].map(([n, p, w], i) => (
-                  <div key={n as string} style={{ "--i": i, "--w": w } as React.CSSProperties}>
-                    <span>
-                      <b>{n}</b> {p}
-                    </span>
-                    <i />
-                  </div>
+                  ["Grant revenue", "$1.20M"],
+                  ["Research and development", "($3.32M)"],
+                  ["General and administrative", "($0.98M)"],
+                  ["Net loss", "($3.10M)"],
+                ].map(([k, v]) => (
+                  <p key={k}>
+                    <span>{k}</span>
+                    <b className="num">{v}</b>
+                  </p>
                 ))}
-              </InView>
+              </div>
             </div>
           </Reveal>
           <Reveal className="lp-cell" delay={160}>
             <div data-spot className="lp-cell-in">
               <div className="lp-cell-copy">
                 <h3>Mapped in an afternoon</h3>
-                <p>Vantiq suggests a category for every account. You confirm, and the numbers update everywhere.</p>
+                <p>Suggestions for every account. You confirm, the review updates.</p>
               </div>
               <InView className="lp-checks">
                 {["4100 Grant revenue", "6110 CRO services", "6210 CMC manufacturing", "7310 Rent"].map((a, i) => (
@@ -237,69 +349,91 @@ export default function LandingPage() {
         </SpotlightGroup>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="lp-section">
-        <Reveal className="lp-section-head">
-          <p className="lp-eyebrow">How it works</p>
-          <h2 className="lp-h2">
-            From ledger to board-ready in <em className="lp-serif">three steps.</em>
-          </h2>
-        </Reveal>
-        <InView className="lp-steps">
-          {[
-            ["Bring your books", "Upload a ledger, budget and cash export, or connect QuickBooks Online, Xero, NetSuite or Sage Intacct."],
-            ["Confirm the mapping", "Accept the suggested category for each account. Anything unsure is flagged, never guessed silently."],
-            ["Run the review", "Variances, programs, statements and runway, ready for the meeting and explained line by line."],
-          ].map(([t, d], i) => (
-            <div key={t} className="lp-step" style={{ "--i": i } as React.CSSProperties}>
-              <span className="lp-step-n">0{i + 1}</span>
-              <h3>{t}</h3>
-              <p>{d}</p>
-            </div>
-          ))}
-        </InView>
+      {/* ---------- Numbers ---------- */}
+      <section className="lp-numbers" aria-label="Vantiq in numbers">
+        {[
+          { to: 200, suffix: "k", label: "ledger rows per import" },
+          { to: 3, suffix: "", label: "access roles, from admin to viewer" },
+          { to: 3, suffix: "", label: "clicks from any number to its transactions" },
+          { to: 100, suffix: "%", label: "of AI notes cite their transactions" },
+        ].map((n, i) => (
+          <Reveal key={n.label} className="lp-number" delay={i * 90}>
+            <b>
+              <CountUp to={n.to} suffix={n.suffix} />
+            </b>
+            <p>{n.label}</p>
+          </Reveal>
+        ))}
       </section>
 
-      {/* Security */}
+      {/* ---------- Security ---------- */}
       <section id="security" className="lp-section lp-security">
         <Reveal className="lp-security-copy">
           <p className="lp-eyebrow">Security</p>
           <h2 className="lp-h2">Your books stay yours.</h2>
-          <p className="lp-body">
-            Each company&apos;s data is walled off inside the database itself, not just in the app code. Every change to
-            a mapping or import is recorded with who made it and when.
+          <p className="lp-lead">
+            Each company&apos;s data is walled off inside the database itself, not just in the app code. Every import,
+            mapping change and new member is recorded with who did it and when.
           </p>
+          <ul className="lp-sec-list">
+            <li>Row-level security on every company table</li>
+            <li>Passwords hashed with scrypt, sessions stored only as hashes</li>
+            <li>Admin, finance and viewer roles</li>
+            <li>A full audit trail of changes</li>
+          </ul>
         </Reveal>
-        <div className="lp-sec-grid">
-          {[
-            ["Isolated by design", "Row-level security in Postgres keeps every company's rows apart on every query."],
-            ["Roles that fit finance", "Admin, finance and viewer access. Viewers read the review, nobody edits by accident."],
-            ["Sessions done right", "Passwords hashed with scrypt. Session tokens are stored only as hashes."],
-            ["A full audit trail", "Imports, mappings and member changes are logged with the person and the time."],
-          ].map(([t, d], i) => (
-            <Reveal key={t} className="lp-sec-item" delay={i * 70}>
-              <h3>{t}</h3>
-              <p>{d}</p>
+        <div className="lp-orbit" aria-hidden>
+          <div className="lp-orbit-ring lp-orbit-1">
+            <span>Audit log</span>
+          </div>
+          <div className="lp-orbit-ring lp-orbit-2">
+            <span>Roles</span>
+          </div>
+          <div className="lp-orbit-ring lp-orbit-3">
+            <span>Row-level security</span>
+          </div>
+          <div className="lp-orbit-core">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- FAQ ---------- */}
+      <section id="faq" className="lp-section lp-faq">
+        <Reveal className="lp-section-head">
+          <p className="lp-eyebrow">FAQ</p>
+          <h2 className="lp-h2">Questions finance teams ask first.</h2>
+        </Reveal>
+        <div className="lp-faq-list">
+          {FAQ.map(([q, a], i) => (
+            <Reveal key={q} delay={i * 50}>
+              <details className="lp-faq-item">
+                <summary>
+                  {q}
+                  <span aria-hidden />
+                </summary>
+                <p>{a}</p>
+              </details>
             </Reveal>
           ))}
         </div>
       </section>
 
-      {/* Final call to action */}
+      {/* ---------- Final call to action ---------- */}
       <section className="lp-final">
-        <div className="lp-final-glow" aria-hidden />
-        <div className="lp-hero-grid" aria-hidden />
+        <div className="lp-final-horizon" aria-hidden />
         <Reveal className="lp-final-in">
           <h2 className="lp-final-h">
-            Your next board meeting, <em className="lp-serif">already prepared.</em>
+            Your next board meeting, <span className="lp-glow-text">already prepared.</span>
           </h2>
           <p>Explore the sample biotech in the demo, or create a workspace and load your own books.</p>
           <div className="lp-ctas">
             <Link href="/overview" className="lp-btn">
               Open the live demo
-              <svg viewBox="0 0 16 16" aria-hidden>
-                <path d="M3 8h10M9 4l4 4-4 4" />
-              </svg>
+              <Arrow />
             </Link>
             <Link href="/sign-up" className="lp-btn-ghost">
               Create your workspace
@@ -309,35 +443,30 @@ export default function LandingPage() {
       </section>
 
       <footer className="lp-footer">
-        <span className="lp-mark lp-mark-sm">
-          vant
-          <span className="lp-mark-i">
-            ı<span aria-hidden />
-          </span>
-          q
-        </span>
-        <p>Finance review for pharma and biotech.</p>
-        <p className="lp-footer-r">© 2026 Vantiq Finance</p>
+        <div className="lp-footer-brand">
+          <Mark small />
+          <p>The finance review for pharma and biotech.</p>
+        </div>
+        <nav aria-label="Footer" className="lp-footer-cols">
+          <div>
+            <p>Product</p>
+            <a href="#product">How it works</a>
+            <a href="#features">Features</a>
+            <Link href="/overview">Live demo</Link>
+          </div>
+          <div>
+            <p>Company</p>
+            <a href="#security">Security</a>
+            <a href="#faq">FAQ</a>
+          </div>
+          <div>
+            <p>Account</p>
+            <Link href="/sign-in">Sign in</Link>
+            <Link href="/sign-up">Create a workspace</Link>
+          </div>
+        </nav>
+        <p className="lp-footer-base">© 2026 Vantiq Finance</p>
       </footer>
     </main>
-  );
-}
-
-function RunwayMini() {
-  // Simplified Helixa cash line: actual, then the forecast to zero.
-  return (
-    <InView className="lp-runway">
-      <svg viewBox="0 0 320 120" preserveAspectRatio="none" aria-hidden>
-        <path d="M0 96 L22 22 L44 26 L66 31 L88 35 L110 39 L132 43 L154 48 L176 52 L198 56 L220 58 L232 62" className="lp-r-line" pathLength={1} />
-        <path d="M232 62 L320 112" className="lp-r-fc" />
-        <circle cx="320" cy="112" r="4" className="lp-r-zero" />
-      </svg>
-      <div className="lp-runway-k">
-        <span>
-          <b className="num">14.6</b> months
-        </span>
-        <span>Runs out Dec 2027</span>
-      </div>
-    </InView>
   );
 }
