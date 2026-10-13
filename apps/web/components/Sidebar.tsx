@@ -7,7 +7,7 @@ import { signOutAction, switchCompanyAction } from "@/app/actions/auth";
 type Role = "admin" | "finance" | "viewer";
 
 const NAV = [
-  { href: "/", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
+  { href: "/overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { href: "/variances", label: "Variances", icon: "M4 19h16M7 15V9m5 6V5m5 10v-3" },
   { href: "/programs", label: "R&D programs", icon: "M9 3h6M10 3v6L5 18a2 2 0 002 3h10a2 2 0 002-3l-5-9V3" },
   { href: "/statements", label: "Statements", icon: "M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4" },
@@ -42,7 +42,7 @@ export function Sidebar({
     if (v) keep.set(k, v);
   }
   const qs = keep.toString() ? `?${keep.toString()}` : "";
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) => pathname.startsWith(href);
 
   return (
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 md:flex">

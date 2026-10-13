@@ -315,7 +315,16 @@ Goal: a small biotech can replace its Excel monthly review pack.
 
 **8. Settings**: company, connections, account mapping, programs, users (Admin, Finance, Viewer).
 
+**9. Landing page** (public, at `/`)
+- The one place Vantiq is allowed to be expressive. The app stays calm; the landing page sells it. It still uses the same accent, wordmark and type, plus Instrument Serif italic for one accent word per headline.
+- Hero: dark "night lab" background with a slow teal aurora, a fine grid and a pointer-following light. Headline "Every dollar, traced to the molecule." rises in word by word. Below it, a live-drawn imitation of the Overview (KPIs count up, the cash line draws, the forecast dashes march to the zero-cash date, program bars grow, an AI note types itself) sits on a tilted stage that flattens as the page scrolls.
+- Sections: ledger marquee (QuickBooks Online, Xero, NetSuite, Sage Intacct, CSV, Excel) → "The gap" (ledger lines turning into programs and phases) → feature bento with pointer-lit borders → three steps → security → dark closing call to action → footer.
+- Only real product facts and the Helixa sample numbers. No invented customers, logos, testimonials or usage statistics.
+- Light and dark themes for the middle sections; hero and closing band are always dark.
+- Every animation respects reduced motion, and content is visible without scripts.
+
 Phase 1 design acceptance checks:
+- [ ] Landing page: no horizontal scroll at 390px; content readable with reduced motion and without scripts; calls to action reach the demo and sign-up.
 - [ ] Every number on Overview, Variances, Statements and R&D opens the drill-down drawer.
 - [ ] Numbers use tabular figures and follow section 4 formatting in all tables.
 - [ ] Favorable/unfavorable colors are correct for both revenue and expense lines.

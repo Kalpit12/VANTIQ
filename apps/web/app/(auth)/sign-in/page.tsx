@@ -9,7 +9,7 @@ export const metadata = { title: "Sign in · Vantiq Finance" };
 
 export default async function SignInPage() {
   if (!dbEnabled()) return <DemoNotice />;
-  if ((await currentSession())?.company) redirect("/");
+  if ((await currentSession())?.company) redirect("/overview");
   return (
     <>
       <h1 className="mb-1 text-[20px] font-semibold text-ink">Sign in</h1>

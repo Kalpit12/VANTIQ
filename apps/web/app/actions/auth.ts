@@ -31,7 +31,7 @@ export async function signInAction(_: FormState, form: FormData): Promise<FormSt
     if (e instanceof AuthError) return { error: e.message, values: { email } };
     throw e;
   }
-  redirect("/");
+  redirect("/overview");
 }
 
 export async function signUpAction(_: FormState, form: FormData): Promise<FormState> {
@@ -43,7 +43,7 @@ export async function signUpAction(_: FormState, form: FormData): Promise<FormSt
     if (e instanceof AuthError) return { error: e.message, values };
     throw e;
   }
-  redirect("/");
+  redirect("/overview");
 }
 
 export async function signOutAction() {
@@ -58,5 +58,5 @@ export async function switchCompanyAction(form: FormData) {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) redirect("/sign-in");
   await switchCompany(getDb(), token, str(form, "companyId"));
-  redirect("/");
+  redirect("/overview");
 }
