@@ -1,7 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { encryptSecret } from "./secrets";
-import { auditEvents, companies, connections, periodChecks, syncRuns } from "./schema";
+import { auditEvents, companies, connections, periodChecks, syncRuns, type ConnectionProvider } from "./schema";
 import { withCompany } from "./tenant";
 
 export type Connection = Omit<typeof connections.$inferSelect, "accountTokenEnc">;
@@ -35,7 +35,7 @@ export async function createConnection(
   db: Db,
   companyId: string,
   userId: string,
-  c: { provider: "merge" | "sandbox"; systemName: string; accountToken?: string },
+  c: { provider: ConnectionProvider; systemName: string; accountToken?: string },
 ): Promise<string> {
   const sealed = c.accountToken ? encryptSecret(c.accountToken) : null;
   return withCompany(db, companyId, async (tx) => {

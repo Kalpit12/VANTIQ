@@ -3,9 +3,12 @@ import {
   ConnectorError,
   isProfitAndLoss,
   mergeConnector,
+  quickbooksConnector,
   sandboxConnector,
   syncWindowStart,
   type Connector,
+  type QuickbooksApp,
+  type QuickbooksCredentials,
   type RemoteAccount,
   type RemoteLine,
   type RemoteProgram,
@@ -13,7 +16,7 @@ import {
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { chunks, ensureAccounts, ensureNamed, ensurePrograms } from "./entities";
-import { decryptSecret } from "./secrets";
+import { decryptSecret, encryptSecret } from "./secrets";
 import { auditEvents, cashBalances, connections, departments, periodChecks, syncRuns, transactions, vendors, type PeriodCheckStatus } from "./schema";
 import { withCompany } from "./tenant";
 
@@ -36,9 +39,35 @@ export interface SyncResult {
   error?: string;
 }
 
-/** Builds the connector for a stored connection. */
-export function openConnector(c: { provider: string; systemName: string; accountTokenEnc: string | null }): Connector {
+/** The QuickBooks app settings from the environment, or null when QuickBooks isn't set up. */
+export function quickbooksApp(origin = process.env.APP_URL ?? ""): QuickbooksApp | null {
+  const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+  const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret, redirectUri: `${origin.replace(/\/$/, "")}/api/connect/quickbooks/callback` };
+}
+
+/** Builds the connector for a stored connection. QuickBooks tokens it refreshes are sealed and saved straight back. */
+export function openConnector(
+  c: { id: string; companyId: string; provider: string; systemName: string; accountTokenEnc: string | null },
+  db?: Db,
+): Connector {
   if (c.provider === "sandbox") return sandboxConnector();
+  if (c.provider === "quickbooks") {
+    const app = quickbooksApp();
+    if (!app) throw new ConnectorError("QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET are not set, so Vantiq cannot reach QuickBooks.");
+    if (!c.accountTokenEnc) throw new ConnectorError("This connection has no access token. Reconnect it.", true);
+    const credentials = JSON.parse(decryptSecret(c.accountTokenEnc)) as QuickbooksCredentials;
+    return quickbooksConnector({
+      app,
+      credentials,
+      onTokens: async (tokens) => {
+        if (!db) return;
+        const sealed = encryptSecret(JSON.stringify({ ...credentials, tokens }));
+        await withCompany(db, c.companyId, (tx) => tx.update(connections).set({ accountTokenEnc: sealed }).where(eq(connections.id, c.id)));
+      },
+    });
+  }
   const apiKey = process.env.MERGE_API_KEY;
   if (!apiKey) throw new ConnectorError("MERGE_API_KEY is not set, so Vantiq cannot reach the accounting system.");
   if (!c.accountTokenEnc) throw new ConnectorError("This connection has no access token. Reconnect it.", true);
@@ -82,7 +111,7 @@ export async function runSync(
   const { conn, runId } = claim;
 
   try {
-    const connector = opts.connector ?? openConnector(conn);
+    const connector = opts.connector ?? openConnector(conn, db);
     const today = opts.today ?? connector.asOf ?? startedAt.toISOString().slice(0, 10);
     const from = syncWindowStart(today, SYNC_MONTHS);
     const periods = periodRange(periodOfDate(from), periodOfDate(today));

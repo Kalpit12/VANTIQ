@@ -1,4 +1,4 @@
-import { can, getConnection, getDb, listPeriodChecks, listSyncRuns } from "@vantiq/db";
+import { can, getConnection, getDb, listPeriodChecks, listSyncRuns, quickbooksApp } from "@vantiq/db";
 import { formatCompactCurrency, formatCurrency, periodLabel } from "@vantiq/domain";
 import { ACCOUNTING_SYSTEMS } from "@vantiq/integrations";
 import { connectSandboxAction, disconnectAction, syncNowAction } from "@/app/actions/connections";
@@ -47,30 +47,49 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
 }
 
 function NotConnected({ allowed, empty }: { allowed: boolean; empty: boolean }) {
-  const ready = Boolean(process.env.MERGE_API_KEY && process.env.CONNECTION_SECRET_KEY);
+  const merge = Boolean(process.env.MERGE_API_KEY && process.env.CONNECTION_SECRET_KEY);
+  // QuickBooks can also connect directly through Intuit, which is free while testing.
+  const quickbooks = Boolean(quickbooksApp() && process.env.CONNECTION_SECRET_KEY);
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {ACCOUNTING_SYSTEMS.map((s) => (
-          <Card key={s.id} className="flex flex-col p-4">
-            <div className="flex items-center gap-3">
-              <span className="num grid h-9 w-9 place-items-center rounded-md bg-accent-subtle text-[12px] font-semibold text-accent" aria-hidden>
-                {s.mono}
-              </span>
-              <div>
-                <h2 className="text-[14px] font-semibold text-ink">{s.name}</h2>
-                <p className="text-[12px] text-ink-3">Ledger, accounts, classes</p>
+        {ACCOUNTING_SYSTEMS.map((s) => {
+          const direct = s.id === "quickbooks" && quickbooks;
+          return (
+            <Card key={s.id} className="flex flex-col p-4">
+              <div className="flex items-center gap-3">
+                <span className="num grid h-9 w-9 place-items-center rounded-md bg-accent-subtle text-[12px] font-semibold text-accent" aria-hidden>
+                  {s.mono}
+                </span>
+                <div>
+                  <h2 className="text-[14px] font-semibold text-ink">{s.name}</h2>
+                  <p className="text-[12px] text-ink-3">{direct ? "Connects directly through Intuit" : merge ? "Ledger, accounts, classes" : "Arrives at launch"}</p>
+                </div>
               </div>
-            </div>
-            {allowed && <ConnectSystem systemId={s.id} systemName={s.name} enabled={ready} />}
-          </Card>
-        ))}
+              {allowed &&
+                (direct ? (
+                  <div className="mt-auto pt-3">
+                    <a
+                      href="/api/connect/quickbooks"
+                      aria-label={`Connect ${s.name}`}
+                      className="flex h-8 w-full items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink hover:bg-subtle"
+                    >
+                      Connect
+                    </a>
+                  </div>
+                ) : (
+                  <ConnectSystem systemId={s.id} systemName={s.name} enabled={merge} />
+                ))}
+            </Card>
+          );
+        })}
       </div>
       {!allowed && <p className="mt-3 text-[13px] text-ink-2">Your role can view numbers but not connect systems. Ask an admin or someone in Finance.</p>}
-      {allowed && !ready && (
+      {allowed && !merge && (
         <p className="mt-3 text-[13px] text-ink-2">
-          Connecting a real system needs a Merge account. Add <code className="num rounded bg-subtle px-1">MERGE_API_KEY</code> and{" "}
-          <code className="num rounded bg-subtle px-1">CONNECTION_SECRET_KEY</code> to the server environment to turn these buttons on.
+          {quickbooks
+            ? "QuickBooks connects directly. Xero, NetSuite and Sage Intacct arrive at launch."
+            : "Connecting a real system isn't set up on this server yet. Until then, try the sandbox below."}
         </p>
       )}
       <Card className="mt-4 p-5">

@@ -16,6 +16,8 @@ import {
   deleteConnection,
   encryptSecret,
   getConnection,
+  openConnector,
+  connections,
   listDueConnections,
   listPeriodChecks,
   listSyncRuns,
@@ -250,6 +252,28 @@ describe("connected accounting system", () => {
     await deleteConnection(db, c.companyId, c.userId);
     expect(await getConnection(db, c.companyId)).toBeNull();
     expect((await loadLedger(db, c.companyId)).data.transactions).toHaveLength(n);
+  });
+
+  it("saves refreshed QuickBooks tokens back to the connection, sealed", async () => {
+    process.env.QUICKBOOKS_CLIENT_ID = "cid";
+    process.env.QUICKBOOKS_CLIENT_SECRET = "secret";
+    const q = await freshCompany("QuickBooks Co");
+    const creds = { realmId: "9130", environment: "sandbox", tokens: { accessToken: "old", refreshToken: "rt-old", expiresAt: 0 } };
+    await createConnection(db, q.companyId, q.userId, { provider: "quickbooks", systemName: "QuickBooks Online (Intuit sandbox)", accountToken: JSON.stringify(creds) });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string) =>
+      new Response(
+        JSON.stringify(String(input).includes("/tokens/bearer") ? { access_token: "new", refresh_token: "rt-new", expires_in: 3600 } : { QueryResponse: { Account: [] } }),
+      )) as typeof fetch;
+    try {
+      const [row] = await withCompany(db, q.companyId, (tx) => tx.select().from(connections));
+      await openConnector(row!, db).listAccounts();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const [after] = await withCompany(db, q.companyId, (tx) => tx.select().from(connections));
+    expect(after!.accountTokenEnc).not.toContain("rt-new");
+    expect(JSON.parse(decryptSecret(after!.accountTokenEnc!)).tokens).toMatchObject({ accessToken: "new", refreshToken: "rt-new" });
   });
 
   it("encrypts provider tokens so the database never holds them in the clear", async () => {

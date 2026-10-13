@@ -156,6 +156,7 @@ export const imports = pgTable(
 );
 
 export const CONNECTION_STATUS = ["active", "error"] as const;
+export type ConnectionProvider = "quickbooks" | "merge" | "sandbox";
 
 /**
  * A company's link to its accounting system. One per company. The provider's
@@ -167,8 +168,8 @@ export const connections = pgTable(
   {
     id: id(),
     companyId: companyId(),
-    /** "merge" for real systems, "sandbox" for the built-in practice books. */
-    provider: text("provider").$type<"merge" | "sandbox">().notNull(),
+    /** "quickbooks" (direct, for testing), "merge" (all systems, at launch) or "sandbox" (the built-in practice books). */
+    provider: text("provider").$type<ConnectionProvider>().notNull(),
     systemName: text("system_name").notNull(),
     status: text("status").$type<(typeof CONNECTION_STATUS)[number]>().notNull().default("active"),
     accountTokenEnc: text("account_token_enc"),
