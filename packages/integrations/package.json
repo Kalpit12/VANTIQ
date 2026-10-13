@@ -12,13 +12,13 @@
   "dependencies": {
     "@vantiq/domain": "workspace:*",
     "exceljs": "4.4.0",
-    "papaparse": "5.5.3"
+    "papaparse": "5.5.3",
+    "@vantiq/fixtures": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.3",
     "@types/papaparse": "5.3.16",
     "typescript": "5.9.3",
-    "vitest": "3.2.7",
-    "@vantiq/fixtures": "workspace:*"
+    "vitest": "3.2.7"
   }
 }

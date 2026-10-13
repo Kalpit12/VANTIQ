@@ -1,6 +1,6 @@
 import { Ledger, periodRange } from "@vantiq/domain";
 import { generateSampleCompany, sampleFiles } from "@vantiq/fixtures";
-import { guessColumns, parseCsv } from "@vantiq/integrations";
+import { guessColumns, parseCsv, sandboxConnector } from "@vantiq/integrations";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -9,7 +9,19 @@ import {
   can,
   closeDb,
   commitImport,
+  ConnectionError,
+  createConnection,
   createDraft,
+  decryptSecret,
+  deleteConnection,
+  encryptSecret,
+  getConnection,
+  openConnector,
+  connections,
+  listDueConnections,
+  listPeriodChecks,
+  listSyncRuns,
+  runSync,
   getDb,
   getSession,
   listMappings,
@@ -150,6 +162,130 @@ describe("sample data through the import path", () => {
     await commitImport(db, a.companyId, a.userId, id, guessColumns(table.headers, "ledger"));
     const loaded = await loadLedger(db, a.companyId);
     expect(loaded.unmapped).toEqual({ accounts: 1, transactions: 1 });
+  });
+});
+
+describe("connected accounting system", () => {
+  const TODAY = "2026-09-30"; // the sample books end in September 2026
+  let a: Awaited<ReturnType<typeof freshCompany>>;
+  beforeAll(async () => {
+    process.env.CONNECTION_SECRET_KEY ??= "test-secret-key-for-connection-tokens";
+    a = await freshCompany("Sync Co");
+    await createConnection(db, a.companyId, a.userId, { provider: "sandbox", systemName: "QuickBooks Online (sandbox)" });
+  });
+
+  it("first sync brings in 24 months that match the sample books, every month balanced", async () => {
+    const res = await runSync(db, a.companyId, { trigger: "initial", actorId: a.userId, today: TODAY });
+    const data = generateSampleCompany();
+    expect(res).toMatchObject({ status: "done", inserted: data.transactions.length, updated: 0, deleted: 0, outOfBalance: [] });
+    const expected = new Ledger(data);
+    const actual = new Ledger((await loadLedger(db, a.companyId)).data);
+    for (const p of periodRange("2024-10", "2026-09")) {
+      expect(actual.actual({ periods: [p], categoryIds: ["opex"] }), p).toBe(expected.actual({ periods: [p], categoryIds: ["opex"] }));
+      expect(actual.actual({ periods: [p], categoryIds: ["revenue"] }), p).toBe(expected.actual({ periods: [p], categoryIds: ["revenue"] }));
+      expect(actual.cashAt(p)).toBe(expected.cashAt(p));
+    }
+    const checks = await listPeriodChecks(db, a.companyId);
+    expect(checks).toHaveLength(24);
+    expect(checks.every((c) => c.status === "balanced")).toBe(true);
+    expect((await getConnection(db, a.companyId))?.lastSyncedAt).toBeTruthy();
+  });
+
+  it("syncing again changes nothing", async () => {
+    const res = await runSync(db, a.companyId, { trigger: "manual", today: TODAY });
+    expect(res).toMatchObject({ status: "done", inserted: 0, updated: 0, deleted: 0 });
+  });
+
+  it("applies edits and deletions made at the source", async () => {
+    const data = generateSampleCompany();
+    const [first, second, ...rest] = data.transactions;
+    const edited = { ...data, transactions: [{ ...first!, amount: first!.amount + 12_345 }, ...rest] };
+    const res = await runSync(db, a.companyId, { trigger: "manual", today: TODAY, connector: sandboxConnector({ data: edited }) });
+    expect(res).toMatchObject({ status: "done", inserted: 0, updated: 1, deleted: 1, outOfBalance: [] });
+    const rows = await withCompany(db, a.companyId, (tx) => tx.select().from(transactions).where(eq(transactions.externalId, second!.id)));
+    expect(rows).toHaveLength(0);
+    // Put the original books back for the next tests.
+    expect(await runSync(db, a.companyId, { trigger: "manual", today: TODAY })).toMatchObject({ inserted: 1, updated: 1 });
+  });
+
+  it("flags a month whose net income no longer matches the source", async () => {
+    const res = await runSync(db, a.companyId, { trigger: "scheduled", today: TODAY, connector: sandboxConnector({ reportedDrift: { "2026-08": 250_000 } }) });
+    expect(res.outOfBalance).toEqual(["2026-08"]);
+    const aug = (await listPeriodChecks(db, a.companyId)).find((c) => c.period === "2026-08")!;
+    expect(aug).toMatchObject({ status: "out_of_balance" });
+    expect(aug.sourceMinor! - aug.vantiqMinor).toBe(250_000);
+    // A within-a-dollar rounding difference still counts as balanced.
+    const ok = await runSync(db, a.companyId, { trigger: "manual", today: TODAY, connector: sandboxConnector({ reportedDrift: { "2026-08": 100 } }) });
+    expect(ok.outOfBalance).toEqual([]);
+  });
+
+  it("records a failed read without touching the books", async () => {
+    const before = (await loadLedger(db, a.companyId)).data.transactions.length;
+    const broken = { ...sandboxConnector(), listLines: async () => Promise.reject(new Error("socket hang up")) };
+    const res = await runSync(db, a.companyId, { trigger: "manual", today: TODAY, connector: broken });
+    expect(res).toMatchObject({ status: "failed", error: "Sync failed: socket hang up" });
+    expect((await loadLedger(db, a.companyId)).data.transactions).toHaveLength(before);
+    expect(await getConnection(db, a.companyId)).toMatchObject({ status: "error", lastError: "Sync failed: socket hang up" });
+    expect((await listSyncRuns(db, a.companyId))[0]).toMatchObject({ status: "failed" });
+    expect((await runSync(db, a.companyId, { trigger: "manual", today: TODAY })).status).toBe("done");
+    expect(await getConnection(db, a.companyId)).toMatchObject({ status: "active", lastError: null });
+  });
+
+  it("lists connections due for a scheduled sync across companies", async () => {
+    const due = await listDueConnections(db, 6 * 3600_000, new Date(Date.now() + 7 * 3600_000));
+    expect(due.map((d) => d.companyId)).toContain(a.companyId);
+    expect((await listDueConnections(db, 6 * 3600_000)).map((d) => d.companyId)).not.toContain(a.companyId);
+  });
+
+  it("refuses a second connection, or connecting over file-imported books", async () => {
+    await expect(createConnection(db, a.companyId, a.userId, { provider: "sandbox", systemName: "Again" })).rejects.toThrow(ConnectionError);
+    const b = await freshCompany("Files First Co");
+    await loadSampleData(db, b.companyId, b.userId);
+    await expect(createConnection(db, b.companyId, b.userId, { provider: "sandbox", systemName: "X" })).rejects.toThrow(/file imports/);
+  });
+
+  it("keeps synced lines after disconnecting", async () => {
+    const c = await freshCompany("Disconnect Co");
+    await createConnection(db, c.companyId, c.userId, { provider: "sandbox", systemName: "Sandbox" });
+    await runSync(db, c.companyId, { trigger: "initial", today: TODAY });
+    const n = (await loadLedger(db, c.companyId)).data.transactions.length;
+    await deleteConnection(db, c.companyId, c.userId);
+    expect(await getConnection(db, c.companyId)).toBeNull();
+    expect((await loadLedger(db, c.companyId)).data.transactions).toHaveLength(n);
+  });
+
+  it("saves refreshed QuickBooks tokens back to the connection, sealed", async () => {
+    process.env.QUICKBOOKS_CLIENT_ID = "cid";
+    process.env.QUICKBOOKS_CLIENT_SECRET = "secret";
+    const q = await freshCompany("QuickBooks Co");
+    const creds = { realmId: "9130", environment: "sandbox", tokens: { accessToken: "old", refreshToken: "rt-old", expiresAt: 0 } };
+    await createConnection(db, q.companyId, q.userId, { provider: "quickbooks", systemName: "QuickBooks Online (Intuit sandbox)", accountToken: JSON.stringify(creds) });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string) =>
+      new Response(
+        JSON.stringify(String(input).includes("/tokens/bearer") ? { access_token: "new", refresh_token: "rt-new", expires_in: 3600 } : { QueryResponse: { Account: [] } }),
+      )) as typeof fetch;
+    try {
+      const [row] = await withCompany(db, q.companyId, (tx) => tx.select().from(connections));
+      await openConnector(row!, db).listAccounts();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const [after] = await withCompany(db, q.companyId, (tx) => tx.select().from(connections));
+    expect(after!.accountTokenEnc).not.toContain("rt-new");
+    expect(JSON.parse(decryptSecret(after!.accountTokenEnc!)).tokens).toMatchObject({ accessToken: "new", refreshToken: "rt-new" });
+  });
+
+  it("encrypts provider tokens so the database never holds them in the clear", async () => {
+    const sealed = encryptSecret("acct-token-123", "k".repeat(32));
+    expect(sealed).not.toContain("acct-token-123");
+    expect(decryptSecret(sealed, "k".repeat(32))).toBe("acct-token-123");
+    expect(() => decryptSecret(sealed, "x".repeat(32))).toThrow();
+    const d = await freshCompany("Token Co");
+    await createConnection(db, d.companyId, d.userId, { provider: "merge", systemName: "Xero", accountToken: "acct-token-123" });
+    const [row] = await withCompany(db, d.companyId, (tx) => tx.execute<{ t: string }>(sql`select account_token_enc as t from connections`));
+    expect(row!.t).not.toContain("acct-token-123");
+    expect(decryptSecret(row!.t)).toBe("acct-token-123");
   });
 });
 

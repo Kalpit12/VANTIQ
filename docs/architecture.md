@@ -161,6 +161,8 @@ CSV/Excel upload follows the same path from step 3, with a column-mapping step.
 
 After every sync, a job compares Vantiq's trial balance per period to the source system's trial balance. Any difference above $1 marks the period "Out of balance" in the UI and blocks pack approval.
 
+Phase 1 implementation (milestone 4): Vantiq stores only profit-and-loss lines, so the check compares each month's **net income** (the sum of synced lines) with the net income on the source system's own monthly income statement, read through Merge. Results live in `period_checks`; months the source can't report show "No report". Pack approval blocking arrives with milestone 6.
+
 ### 6.3 Locking
 
 When a review pack is approved, its period is locked: its numbers, explanations and comments are snapshotted. Later syncs that change a locked period raise a "Post-close change" alert instead of silently changing the pack.

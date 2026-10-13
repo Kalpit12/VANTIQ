@@ -63,3 +63,6 @@ export function href(path: string, sp: SearchParams, overrides: Record<string, s
   const s = q.toString();
   return s ? `${path}?${s}` : path;
 }
+
+/** Holds the anti-forgery state between leaving for Intuit and coming back. */
+export const QB_STATE_COOKIE = "vantiq_qb_state";

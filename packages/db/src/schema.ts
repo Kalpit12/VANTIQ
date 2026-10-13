@@ -73,6 +73,8 @@ export const sourceAccounts = pgTable(
     companyId: companyId(),
     code: text("code").notNull(),
     name: text("name").notNull().default(""),
+    /** revenue, expense, asset, liability or equity, when a connected system says so. */
+    classification: text("classification"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("source_accounts_code_idx").on(t.companyId, t.code)],
@@ -153,12 +155,80 @@ export const imports = pgTable(
   (t) => [index("imports_company_idx").on(t.companyId, t.createdAt)],
 );
 
+export const CONNECTION_STATUS = ["active", "error"] as const;
+export type ConnectionProvider = "quickbooks" | "merge" | "sandbox";
+
+/**
+ * A company's link to its accounting system. One per company. The provider's
+ * account token is stored encrypted (secrets.ts); the customer's own
+ * accounting credentials never reach Vantiq.
+ */
+export const connections = pgTable(
+  "connections",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** "quickbooks" (direct, for testing), "merge" (all systems, at launch) or "sandbox" (the built-in practice books). */
+    provider: text("provider").$type<ConnectionProvider>().notNull(),
+    systemName: text("system_name").notNull(),
+    status: text("status").$type<(typeof CONNECTION_STATUS)[number]>().notNull().default("active"),
+    accountTokenEnc: text("account_token_enc"),
+    /** Start time of the last successful sync; the next one asks for changes since then. */
+    syncedThrough: timestamp("synced_through", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("connections_company_idx").on(t.companyId)],
+);
+
+export const syncRuns = pgTable(
+  "sync_runs",
+  {
+    id: id(),
+    companyId: companyId(),
+    connectionId: uuid("connection_id").notNull().references(() => connections.id, { onDelete: "cascade" }),
+    trigger: text("trigger").$type<"initial" | "manual" | "scheduled">().notNull(),
+    status: text("status").$type<"running" | "done" | "failed">().notNull(),
+    inserted: integer("inserted").notNull().default(0),
+    updated: integer("updated").notNull().default(0),
+    deleted: integer("deleted").notNull().default(0),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("sync_runs_connection_idx").on(t.connectionId, t.startedAt)],
+);
+
+export const PERIOD_CHECK_STATUS = ["balanced", "out_of_balance", "unavailable"] as const;
+export type PeriodCheckStatus = (typeof PERIOD_CHECK_STATUS)[number];
+
+/** After each sync: does Vantiq's copy of a month add up to the source system's own net income? */
+export const periodChecks = pgTable(
+  "period_checks",
+  {
+    companyId: companyId(),
+    connectionId: uuid("connection_id").notNull().references(() => connections.id, { onDelete: "cascade" }),
+    period: char("period", { length: 7 }).notNull(),
+    /** Net income as the source reports it; null when it could not say. */
+    sourceMinor: bigint("source_minor", { mode: "number" }),
+    vantiqMinor: money("vantiq_minor"),
+    status: text("status").$type<PeriodCheckStatus>().notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.connectionId, t.period] })],
+);
+
 export const transactions = pgTable(
   "transactions",
   {
     id: id(),
     companyId: companyId(),
     importId: uuid("import_id").references(() => imports.id, { onDelete: "set null" }),
+    /** Set for lines that came from a connected accounting system rather than a file. */
+    connectionId: uuid("connection_id").references(() => connections.id, { onDelete: "set null" }),
+    externalId: text("external_id"),
     date: date("date", { mode: "string" }).notNull(),
     sourceAccountId: uuid("source_account_id").notNull().references(() => sourceAccounts.id),
     vendorId: uuid("vendor_id").references(() => vendors.id),
@@ -168,10 +238,10 @@ export const transactions = pgTable(
     amountMinor: money("amount_minor"),
     currency: char("currency", { length: 3 }).notNull().default("USD"),
     memo: text("memo").notNull().default(""),
-    /** Makes re-importing the same file a no-op. */
+    /** Makes re-importing the same file a no-op; for synced lines it is `ext:<connection>:<external id>`. */
     sourceHash: text("source_hash").notNull(),
   },
-  (t) => [uniqueIndex("transactions_hash_idx").on(t.companyId, t.sourceHash), index("transactions_date_idx").on(t.companyId, t.date)],
+  (t) => [uniqueIndex("transactions_hash_idx").on(t.companyId, t.sourceHash), index("transactions_date_idx").on(t.companyId, t.date), index("transactions_connection_idx").on(t.connectionId)],
 );
 
 export const budgetLines = pgTable(
@@ -226,4 +296,7 @@ export const TENANT_TABLES = [
   "budget_lines",
   "cash_balances",
   "audit_events",
+  "connections",
+  "sync_runs",
+  "period_checks",
 ] as const;

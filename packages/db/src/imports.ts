@@ -3,8 +3,6 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   guessColumns,
   normalize,
-  suggestCategory,
-  EXCLUDED,
   type BudgetRecord,
   type CashRecord,
   type ColumnMap,
@@ -14,11 +12,10 @@ import {
   type RowError,
 } from "@vantiq/integrations";
 import type { Db, Tx } from "./client";
-import { accountMappings, auditEvents, budgetLines, cashBalances, departments, imports, programs, sourceAccounts, transactions, vendors } from "./schema";
+import { auditEvents, budgetLines, cashBalances, departments, imports, transactions, vendors } from "./schema";
+import { chunks, ensureAccounts, ensureNamed, ensurePrograms } from "./entities";
 import { withCompany } from "./tenant";
 
-const CHUNK = 1000;
-const chunks = <T>(xs: T[]) => Array.from({ length: Math.ceil(xs.length / CHUNK) }, (_, i) => xs.slice(i * CHUNK, (i + 1) * CHUNK));
 
 /** Step 1: store the parsed file and a first guess at its columns. */
 export async function createDraft(db: Db, companyId: string, userId: string, kind: ImportKind, filename: string, table: RawTable) {
@@ -94,44 +91,6 @@ export async function commitImport(db: Db, companyId: string, userId: string, im
     });
     return result;
   });
-}
-
-async function ensureAccounts(tx: Tx, companyId: string, accounts: Map<string, string>) {
-  const existing = await tx.select().from(sourceAccounts);
-  const byCode = new Map(existing.map((a) => [a.code, a]));
-  const fresh = [...accounts].filter(([code]) => !byCode.has(code)).map(([code, name]) => ({ companyId, code, name }));
-  for (const c of chunks(fresh)) for (const a of await tx.insert(sourceAccounts).values(c).returning()) byCode.set(a.code, a);
-  // Fill in names that an earlier file left blank.
-  for (const [code, name] of accounts) {
-    const a = byCode.get(code)!;
-    if (!a.name && name) await tx.update(sourceAccounts).set({ name }).where(eq(sourceAccounts.id, a.id));
-  }
-  // First-guess mappings for accounts nobody has mapped yet.
-  const mapped = new Set((await tx.select({ id: accountMappings.sourceAccountId }).from(accountMappings)).map((m) => m.id));
-  const suggestions = [...byCode.values()]
-    .filter((a) => !mapped.has(a.id))
-    .flatMap((a) => {
-      const s = suggestCategory(a.code, accounts.get(a.code) || a.name);
-      if (!s) return [];
-      const excluded = s.categoryId === EXCLUDED;
-      return [{ sourceAccountId: a.id, companyId, categoryId: excluded ? null : s.categoryId, excluded, status: "suggested" as const, reason: s.reason }];
-    });
-  for (const c of chunks(suggestions)) await tx.insert(accountMappings).values(c).onConflictDoNothing();
-  return { idByCode: new Map([...byCode].map(([k, v]) => [k, v.id])), newAccounts: fresh.length };
-}
-
-async function ensureNamed(tx: Tx, companyId: string, table: typeof vendors | typeof departments, names: Set<string>) {
-  const list = [...names].filter(Boolean);
-  if (list.length) await tx.insert(table).values(list.map((name) => ({ companyId, name }))).onConflictDoNothing();
-  const rows = await tx.select({ id: table.id, name: table.name }).from(table);
-  return new Map(rows.map((r) => [r.name, r.id]));
-}
-
-async function ensurePrograms(tx: Tx, companyId: string, codes: Set<string>) {
-  const list = [...codes].filter(Boolean);
-  if (list.length) await tx.insert(programs).values(list.map((code) => ({ companyId, code, name: code }))).onConflictDoNothing();
-  const rows = await tx.select({ id: programs.id, code: programs.code }).from(programs);
-  return new Map(rows.map((r) => [r.code, r.id]));
 }
 
 async function saveLedger(tx: Tx, companyId: string, importId: string, res: { records: LedgerRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {

@@ -30,3 +30,10 @@ export async function loadSampleData(db: Db, companyId: string, userId: string) 
     await commitImport(db, companyId, userId, id, guessColumns(table.headers, kind));
   }
 }
+
+/** Just the sample budget, for a company whose actuals come from the sandbox connection. */
+export async function loadSampleBudget(db: Db, companyId: string, userId: string) {
+  const table = parseCsv(sampleFiles().budgetCsv);
+  const id = await createDraft(db, companyId, userId, "budget", "helixa-budget.csv", table);
+  await commitImport(db, companyId, userId, id, guessColumns(table.headers, "budget"));
+}
