@@ -182,3 +182,13 @@ test("inventory groups stock by expiry, explains each write-off and exports the 
   expect(lines).toHaveLength(1 + 6 * 2);
   expect(lines[1]).toBe("EXP-202609,2026-09-30,6320,Inventory write-off (expiry),25200.00,,\"Expiry reserve HX-204 drug product 50 mg lot DP-2311 2026-09, reverses 2026-10-01\",HX-204");
 });
+
+test("forecast shows the next 12 months under each scenario", async ({ page }) => {
+  await page.goto("/forecast");
+  await expect(page.getByRole("heading", { name: "Forecast", level: 1 })).toBeVisible();
+  await expect(page.getByText("$49.0M net burn over the next 12 months under Base")).toBeVisible();
+  await expect(page.getByRole("row", { name: /^Downside −25% \/ \+10%/ })).toBeVisible();
+  await page.getByRole("navigation", { name: "Scenario" }).getByRole("link", { name: "Upside" }).click();
+  await expect(page.getByText(/· Scenario: Upside$/)).toBeVisible();
+  await expect(page.getByText("This sample forecast uses the standard drivers. Sign up to set your own.")).toBeVisible();
+});

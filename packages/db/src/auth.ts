@@ -120,6 +120,8 @@ export const can = {
   manageIncome: (r: Role) => r === "admin" || r === "finance",
   /** Add, change and import inventory batches. */
   manageInventory: (r: Role) => r === "admin" || r === "finance",
+  /** Set forecast drivers, scenario changes and months by hand. */
+  manageForecast: (r: Role) => r === "admin" || r === "finance",
 };
 
 export async function listMembers(db: Db, companyId: string) {

@@ -545,3 +545,48 @@ test("connect Sage Intacct with a Web Services user and sync", async ({ page }) 
   await expect(page.getByText("All 24 months match Sage Intacct.")).toBeVisible();
   await expect(page.getByRole("row", { name: /First sync/ })).toBeVisible();
 });
+
+test("forecast: switch scenarios, set a driver, a scenario change and a month by hand, without touching actuals", async ({ page }) => {
+  await signUp(page, "Forecast Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("link", { name: "Forecast" }).click();
+  await expect(page.getByText("Oct 2026 to Sep 2027, from the books to Sep 2026 · Scenario: Base")).toBeVisible();
+  await expect(page.getByText("$49.0M net burn over the next 12 months under Base")).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Scenario" }).getByRole("link", { name: "Downside" }).click();
+  await expect(page.getByText(/· Scenario: Downside$/)).toBeVisible();
+  await page.getByLabel("Costs %").fill("20");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("row", { name: /^Downside −25% \/ \+20%/ })).toBeVisible();
+
+  const driver = page.locator("form", { has: page.getByRole("button", { name: "Set driver" }) });
+  await driver.locator("select[name=categoryId]").selectOption("rd-cro");
+  await driver.getByLabel("Growth %/mo").fill("2");
+  await driver.getByRole("button", { name: "Set driver" }).click();
+  await expect(page.getByText("· Run rate +2%/mo")).toBeVisible();
+
+  const month = page.locator("form", { has: page.getByRole("button", { name: "Set month" }) });
+  await month.locator("select[name=categoryId]").selectOption("rev-collab");
+  await month.locator("select[name=period]").selectOption("2027-03");
+  await month.getByLabel("Amount (USD)").fill("5,000,000");
+  await month.getByLabel("Why").fill("Phase 2 start milestone");
+  await month.getByRole("button", { name: "Set month" }).click();
+  await expect(page.getByText("Collaboration revenue, Mar 2027")).toBeVisible();
+  await expect(page.getByLabel("Set by hand")).toHaveCount(1);
+
+  // Each scenario keeps its own: Base is unchanged.
+  await page.getByRole("navigation", { name: "Scenario" }).getByRole("link", { name: "Base" }).click();
+  await expect(page.getByText("$49.0M net burn over the next 12 months under Base")).toBeVisible();
+  await expect(page.getByText("Phase 2 start milestone")).toHaveCount(0);
+
+  await page.goto("/settings/audit?area=forecast");
+  await expect(page.getByText("Changed the Downside scenario: costs +10% to +20%")).toBeVisible();
+  await expect(page.getByText("Set CRO and clinical fees in Downside to run rate, +2% a month")).toBeVisible();
+  await expect(page.getByText("Set Collaboration revenue for Mar 2027 in Downside to $5.0M: “Phase 2 start milestone”")).toBeVisible();
+
+  // Actuals are untouched.
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible();
+});
