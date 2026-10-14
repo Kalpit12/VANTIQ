@@ -1,12 +1,15 @@
 import { periodLabel, periodOfDate, periodRange, type Cents, type Period } from "@vantiq/domain";
 import {
   ConnectorError,
+  intacctConnector,
   isProfitAndLoss,
   mergeConnector,
   quickbooksConnector,
   sandboxConnector,
   syncWindowStart,
   type Connector,
+  type IntacctCredentials,
+  type IntacctSender,
   type QuickbooksApp,
   type QuickbooksCredentials,
   type RemoteAccount,
@@ -48,6 +51,13 @@ export function quickbooksApp(origin = process.env.APP_URL ?? ""): QuickbooksApp
   return { clientId, clientSecret, redirectUri: `${origin.replace(/\/$/, "")}/api/connect/quickbooks/callback` };
 }
 
+/** Vantiq's Sage Intacct Web Services sender from the environment, or null when Intacct isn't set up. */
+export function intacctSender(): IntacctSender | null {
+  const senderId = process.env.INTACCT_SENDER_ID;
+  const senderPassword = process.env.INTACCT_SENDER_PASSWORD;
+  return senderId && senderPassword ? { senderId, senderPassword } : null;
+}
+
 /** Builds the connector for a stored connection. QuickBooks tokens it refreshes are sealed and saved straight back. */
 export function openConnector(
   c: { id: string; companyId: string; provider: string; systemName: string; accountTokenEnc: string | null },
@@ -68,6 +78,12 @@ export function openConnector(
         await withCompany(db, c.companyId, (tx) => tx.update(connections).set({ accountTokenEnc: sealed }).where(eq(connections.id, c.id)));
       },
     });
+  }
+  if (c.provider === "sage_intacct") {
+    const sender = intacctSender();
+    if (!sender) throw new ConnectorError("INTACCT_SENDER_ID and INTACCT_SENDER_PASSWORD are not set, so Vantiq cannot reach Sage Intacct.");
+    if (!c.accountTokenEnc) throw new ConnectorError("This connection has no credentials. Reconnect it.", true);
+    return intacctConnector({ sender, credentials: JSON.parse(decryptSecret(c.accountTokenEnc)) as IntacctCredentials, endpoint: process.env.INTACCT_ENDPOINT || undefined });
   }
   const apiKey = process.env.MERGE_API_KEY;
   if (!apiKey) throw new ConnectorError("MERGE_API_KEY is not set, so Vantiq cannot reach the accounting system.");
