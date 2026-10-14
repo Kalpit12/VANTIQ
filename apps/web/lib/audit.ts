@@ -1,4 +1,4 @@
-import { periodLabel } from "@vantiq/domain";
+import { formatCompactCurrency, periodLabel } from "@vantiq/domain";
 import type { AuditRow } from "@vantiq/db";
 
 const month = (s: string) => (/^\d{4}-\d{2}$/.test(s) ? periodLabel(s) : s);
@@ -8,6 +8,9 @@ const scope = (s: string, names: Map<string, string>) => {
   const when = b ? `${month(a!)} to ${month(b)}` : month(a!);
   return line ? `${names.get(line) ?? line} · ${when}` : when;
 };
+
+const money = (v: unknown) => formatCompactCurrency(Number(v ?? 0));
+const likely = (v: unknown) => `${Math.round(Number(v ?? 0) * 100)}%`;
 
 /** Close task targets are stored as "2026-09 Task title". */
 const taskName = (target: string) => `“${target.replace(/^\d{4}-\d{2} /, "")}”`;
@@ -24,6 +27,7 @@ export const AUDIT_AREAS = [
   { key: "sync", label: "Syncs" },
   { key: "member", label: "Members" },
   { key: "trial", label: "Trials" },
+  { key: "income", label: "Grants and income" },
   { key: "company", label: "Company" },
 ] as const;
 
@@ -78,6 +82,21 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
       return `${d.source === "import" ? "Imported" : "Recorded"} CRO activity for ${e.target}: ${Array.isArray(d.months) ? (d.months as string[]).map(month).join(", ") : ""}`;
     case "trial.journal_exported":
       return `Downloaded accrual journal entries for ${month(e.target)}${Array.isArray(d.trials) ? ` (${(d.trials as string[]).join(", ")})` : ""}`;
+    case "income.created":
+      return `Added the income schedule ${e.target} (${String(d.counterparty ?? "")})`;
+    case "income.receipt_added":
+      return `Added ${String(d.label ?? "a receipt")} to ${e.target}: ${money(d.amount)} expected ${month(String(d.expected ?? ""))} at ${likely(d.probability)}`;
+    case "income.receipt_changed": {
+      const b = (d.before ?? {}) as Record<string, unknown>;
+      const changes = [
+        b.expected !== d.expected && `moved from ${month(String(b.expected ?? ""))} to ${month(String(d.expected ?? ""))}`,
+        b.amount !== d.amount && `amount ${money(b.amount)} to ${money(d.amount)}`,
+        b.probability !== d.probability && `likelihood ${likely(b.probability)} to ${likely(d.probability)}`,
+      ].filter(Boolean);
+      return `Changed ${String(d.label ?? "a receipt")} on ${e.target}${changes.length ? `: ${changes.join(", ")}` : ""}`;
+    }
+    case "income.receipt_removed":
+      return `Removed ${String(d.label ?? "a receipt")} from ${e.target}`;
     case "close.assigned":
       return `Assigned ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
     case "close.prepared":

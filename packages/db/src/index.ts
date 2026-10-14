@@ -16,3 +16,4 @@ export * from "./audit";
 export * from "./trials";
 export * from "./close";
 export * from "./shares";
+export * from "./income";

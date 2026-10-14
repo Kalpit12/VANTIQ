@@ -11,6 +11,7 @@ const pages = [
   { path: "/pack/board", heading: "Helixa Therapeutics" },
   { path: "/trials", heading: "Trial accruals" },
   { path: "/trials/hx-204-101", heading: "HX-204-101" },
+  { path: "/income", heading: "Grants and income" },
 ];
 
 for (const p of pages) {
@@ -151,4 +152,18 @@ test("trial accruals show the work done against billing, step by step, and expor
   // Earlier months show the accrual as it stood then.
   await page.goto("/trials/hx-204-101?period=2026-06");
   await expect(page.getByText("hasn't reported")).toHaveCount(0);
+});
+
+test("grants and partner income show what arrived, what is late and what to expect", async ({ page }) => {
+  await page.goto("/income?period=2026-09");
+  await expect(page.getByText("$3.6M drawn of $4.5M")).toBeVisible();
+  await expect(page.getByText("Received 25 Aug 2026 · 2 mo late")).toBeVisible();
+  await expect(page.getByText("Overdue, not in the books")).toBeVisible();
+  await expect(page.getByText("Kairo license (HX-310): Signing fee, due Aug 2026")).toBeVisible();
+  // The demo can't be edited.
+  await expect(page.getByRole("button", { name: "Add receipt" })).toHaveCount(0);
+  // A month earlier, the Novagen milestone hadn't arrived and Kairo's fee wasn't due yet.
+  await page.goto("/income?period=2026-07");
+  await expect(page.getByText("Signing fee, due Aug 2026")).toHaveCount(0);
+  await expect(page.getByText("Novagen collaboration (HX-204): First patient dosed, due Jun 2026")).toBeVisible();
 });

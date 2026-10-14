@@ -1,4 +1,4 @@
-import { billedForTrial, estimateAccrual, Ledger, periodRange } from "@vantiq/domain";
+import { billedForTrial, estimateAccrual, Ledger, periodRange, receivedFor, scheduleStatus } from "@vantiq/domain";
 import { generateSampleCompany, generateSampleTrials, sampleFiles } from "@vantiq/fixtures";
 import { guessColumns, parseCsv, sandboxConnector } from "@vantiq/integrations";
 import { eq, sql } from "drizzle-orm";
@@ -66,6 +66,10 @@ import {
   revokeShareLink,
   ShareError,
   shareLinks,
+  createIncomeSource,
+  IncomeError,
+  listIncomeSources,
+  saveReceipt,
   type Db,
 } from "../src";
 
@@ -609,6 +613,38 @@ describe("board pack share links", () => {
 
     const audit = await listAuditEvents(db, a.companyId, { area: "share" });
     expect(audit.map((e) => e.action).sort()).toEqual(["share.created", "share.created", "share.downloaded", "share.revoked", "share.viewed", "share.viewed"]);
+  });
+});
+
+describe("income schedules", () => {
+  it("stores schedules, edits receipts with an audit trail, and matches the sample books", async () => {
+    const a = await freshCompany("Income Co");
+    const src = { name: "State grant", kind: "grant" as const, counterparty: "State of MA", programCode: null, award: 1_000_000_00 };
+    const id = await createIncomeSource(db, a.companyId, a.userId, src, [{ label: "Tranche 1", expected: "2026-10", amount: 500_000_00, probability: 1 }]);
+    await expect(createIncomeSource(db, a.companyId, a.userId, src)).rejects.toThrow(/already a schedule/);
+    await expect(createIncomeSource(db, a.companyId, a.userId, { ...src, name: "X", award: -5 })).rejects.toThrow(IncomeError);
+    await saveReceipt(db, a.companyId, a.userId, id, null, { label: "Tranche 2", expected: "2027-04", amount: 500_000_00, probability: 0.9 });
+    await expect(saveReceipt(db, a.companyId, a.userId, id, null, { label: "Bad", expected: "2027-04", amount: 1, probability: 2 })).rejects.toThrow(/likelihood/);
+    let [s] = await listIncomeSources(db, a.companyId);
+    expect(s!.receipts.map((r) => r.label)).toEqual(["Tranche 1", "Tranche 2"]);
+    const t2 = s!.receipts[1]!.id;
+    await saveReceipt(db, a.companyId, a.userId, id, t2, { label: "Tranche 2", expected: "2027-06", amount: 500_000_00, probability: 0.8 });
+    await saveReceipt(db, a.companyId, a.userId, id, s!.receipts[0]!.id, null);
+    [s] = await listIncomeSources(db, a.companyId);
+    expect(s!.receipts).toEqual([{ id: t2, label: "Tranche 2", expected: "2027-06", amount: 500_000_00, probability: 0.8 }]);
+    const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'income.%' order by at`));
+    expect(audit.map((r) => r.action)).toEqual(["income.created", "income.receipt_added", "income.receipt_changed", "income.receipt_removed"]);
+    expect(await listIncomeSources(db, (await freshCompany("Other Income Co")).companyId)).toEqual([]);
+  });
+
+  it("loads the sample schedules with the sample books", async () => {
+    const a = await freshCompany("Sample Income Co");
+    await loadSampleData(db, a.companyId, a.userId);
+    const sources = await listIncomeSources(db, a.companyId);
+    expect(sources.map((s) => s.name)).toEqual(["NIH SBIR Phase II grant", "Novagen collaboration (HX-204)", "Kairo license (HX-310)"]);
+    const ledger = (await loadLedger(db, a.companyId)).data;
+    const nih = scheduleStatus(sources[0]!, receivedFor(ledger, sources[0]!), "2026-09");
+    expect(nih.filter((r) => r.status === "received")).toHaveLength(8);
   });
 });
 

@@ -473,6 +473,36 @@ export const shareLinks = pgTable(
   (t) => [uniqueIndex("share_links_token_idx").on(t.tokenHash), index("share_links_company_idx").on(t.companyId, t.period)],
 );
 
+/**
+ * A grant, partner collaboration or license and its schedule of expected
+ * receipts (shape ExpectedReceipt[] from @vantiq/domain). What was actually
+ * received is never stored here: it comes from the ledger, matched by
+ * counterparty, so income is only ever entered once.
+ */
+export const incomeSources = pgTable(
+  "income_sources",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    kind: text("kind").$type<"grant" | "milestone" | "license">().notNull(),
+    counterparty: text("counterparty").notNull(),
+    programCode: text("program_code"),
+    award: bigint("award", { mode: "number" }),
+    receipts: jsonb("receipts").$type<ExpectedReceiptJson[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("income_sources_name_idx").on(t.companyId, t.name)],
+);
+
+export interface ExpectedReceiptJson {
+  id: string;
+  label: string;
+  expected: string;
+  amount: number;
+  probability: number;
+}
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -494,4 +524,5 @@ export const TENANT_TABLES = [
   "trial_activity",
   "close_tasks",
   "comments",
+  "income_sources",
 ] as const;

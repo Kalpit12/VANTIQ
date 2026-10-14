@@ -399,3 +399,41 @@ test("close checklist: owner and reviewer, sign-off, comments on tasks and lines
     await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
   }
 });
+
+test("income schedules: move a late licensing fee, add a grant, and see it in the audit log", async ({ page }) => {
+  await signUp(page, "Income Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("link", { name: "Grants and income" }).click();
+  await expect(page.getByText("Kairo license (HX-310): Signing fee, due Aug 2026")).toBeVisible();
+
+  // Kairo's term sheet slipped: the fee is now expected in November.
+  const kairo = page.locator("section", { has: page.getByRole("heading", { name: /Kairo license/ }) });
+  await kairo.getByText("Change").first().click();
+  const change = kairo.getByRole("form", { name: "Change Signing fee" });
+  await change.getByLabel("Expected").fill("2026-11");
+  await change.getByLabel("Likelihood %").fill("70");
+  await change.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Nothing expected has failed to arrive.")).toBeVisible();
+
+  // A new state grant with its first tranche
+  await page.getByLabel("Name", { exact: true }).fill("CPRIT product development award");
+  await page.getByLabel("Paid by").fill("Texas CPRIT");
+  await page.getByLabel("Total award (grants, USD)").fill("2,000,000");
+  await page.getByRole("button", { name: "Add schedule" }).click();
+  const cprit = page.locator("section", { has: page.getByRole("heading", { name: /CPRIT product development award/ }) });
+  await expect(cprit.getByText("no payments from Texas CPRIT found yet")).toBeVisible();
+  const add = cprit.getByRole("form", { name: "Add a receipt to CPRIT product development award" });
+  await add.getByLabel("Receipt").fill("Tranche 1");
+  await add.getByLabel("Expected").fill("2026-12");
+  await add.getByLabel("Amount (USD)").fill("1,000,000");
+  await add.getByLabel("Likelihood %").fill("90");
+  await add.getByRole("button", { name: "Add receipt" }).click();
+  await expect(cprit.getByRole("cell", { name: "$900k" })).toBeVisible();
+  await expect(cprit.getByText("$0 drawn of $2.0M")).toBeVisible();
+
+  await page.goto("/settings/audit?area=income");
+  await expect(page.getByText("Changed Signing fee on Kairo license (HX-310): moved from Aug 2026 to Nov 2026, likelihood 80% to 70%")).toBeVisible();
+  await expect(page.getByText("Added Tranche 1 to CPRIT product development award: $1.0M expected Dec 2026 at 90%")).toBeVisible();
+});

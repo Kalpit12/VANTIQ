@@ -57,6 +57,13 @@
       "when": 1791974965761,
       "tag": "0007_share_links",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791976479582,
+      "tag": "0008_income_sources",
+      "breakpoints": true
     }
   ]
 }

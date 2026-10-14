@@ -24,7 +24,7 @@ export function TopBar({
   // Period controls only apply to the review screens.
   const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings|connections)/.test(pathname);
   // A review pack is always one month.
-  const showMode = !/^\/(pack|trials|close)/.test(pathname);
+  const showMode = !/^\/(pack|trials|close|income)/.test(pathname);
 
   const go = (changes: Record<string, string>) => {
     const q = new URLSearchParams(sp.toString());
@@ -34,13 +34,13 @@ export function TopBar({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-line bg-surface/95 px-6 backdrop-blur">
+    <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-surface/95 px-4 py-2 backdrop-blur sm:px-6">
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold text-ink">{companyName}</span>
         {sample && <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">Sample data</span>}
       </div>
       {showPeriod && (
-      <div className="ml-4 flex items-center gap-2">
+      <div className="flex items-center gap-2 sm:ml-4">
         <label className="sr-only" htmlFor="period">
           Period
         </label>
@@ -71,7 +71,7 @@ export function TopBar({
           ))}
         </div>
         )}
-        {!/^\/(trials|close)/.test(pathname) && <span className="text-[13px] text-ink-3">vs Budget</span>}
+        {!/^\/(trials|close|income)/.test(pathname) && <span className="hidden text-[13px] text-ink-3 sm:inline">vs Budget</span>}
       </div>
       )}
       <div className="ml-auto flex items-center gap-3">
