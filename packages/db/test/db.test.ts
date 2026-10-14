@@ -1,6 +1,6 @@
 import { billedForTrial, estimateAccrual, expiryBuckets, Ledger, periodRange, receivedFor, scheduleStatus } from "@vantiq/domain";
 import { generateSampleCompany, generateSampleTrials, sampleFiles } from "@vantiq/fixtures";
-import { guessColumns, parseCsv, sandboxConnector } from "@vantiq/integrations";
+import { guessColumns, intacctConnector, parseCsv, sandboxConnector } from "@vantiq/integrations";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -836,5 +836,42 @@ describe("tenant isolation", () => {
     await withCompany(db, b.companyId, (tx) => tx.update(transactions).set({ memo: "tampered" }).where(eq(transactions.id, aTxn!.id)));
     const [still] = await withCompany(db, a.companyId, (tx) => tx.select().from(transactions).where(eq(transactions.id, aTxn!.id)));
     expect(still?.memo).toBe("");
+  });
+});
+
+describe("Sage Intacct connection", () => {
+  const ok = (data: string) => `<response><control><status>success</status></control><operation><authentication><status>success</status></authentication><result><status>success</status>${data}</result></operation></response>`;
+  const rows = (type: string, items: Record<string, string>[]) => `<data count="${items.length}" numremaining="0">${items.map((i) => `<${type}>${Object.entries(i).map(([k, v]) => `<${k}>${v}</${k}>`).join("")}</${type}>`).join("")}</data>`;
+  const fake = (async (_: string, init: RequestInit) => {
+    const fn = String(init.body);
+    let xml = ok("<data/>");
+    if (fn.includes("<object>GLACCOUNT</object>"))
+      xml = ok(rows("glaccount", [
+        { ACCOUNTNO: "6110", TITLE: "CRO clinical trial services", ACCOUNTTYPE: "incomestatement", NORMALBALANCE: "debit" },
+        { ACCOUNTNO: "4100", TITLE: "Collaboration revenue", ACCOUNTTYPE: "incomestatement", NORMALBALANCE: "credit" },
+      ]));
+    else if (fn.includes("<object>GLDETAIL</object>") && fn.includes("09/01/2026"))
+      xml = ok(rows("gldetail", [
+        { RECORDNO: "9001", ENTRY_DATE: "09/03/2026", ACCOUNTNO: "6110", TR_TYPE: "1", AMOUNT: "125000.00", VENDORNAME: "Meridian Clinical Research", PROJECTNAME: "HX-101" },
+        { RECORDNO: "9002", ENTRY_DATE: "09/15/2026", ACCOUNTNO: "4100", TR_TYPE: "-1", AMOUNT: "500000.00" },
+      ]));
+    else if (fn.includes("<get_accountbalances>") && fn.includes("<year>2026</year><month>9</month>"))
+      xml = ok(`<data><accountbalance><glaccountno>6110</glaccountno><debits>125000</debits><credits>0</credits></accountbalance><accountbalance><glaccountno>4100</glaccountno><debits>0</debits><credits>500000</credits></accountbalance></data>`);
+    else if (fn.includes("<object>PROJECT</object>")) xml = ok(rows("project", [{ NAME: "HX-101", STATUS: "active" }]));
+    return new Response(xml);
+  }) as typeof fetch;
+
+  it("stores sealed credentials and syncs a month that balances against Intacct's own numbers", async () => {
+    process.env.CONNECTION_SECRET_KEY ??= "test-secret-key-for-connection-tokens";
+    const a = await freshCompany("Intacct Co");
+    const credentials = { companyId: "helix-bio", userId: "vantiq_ws", password: "pw", programDimension: "project" as const };
+    await createConnection(db, a.companyId, a.userId, { provider: "sage_intacct", systemName: "Sage Intacct", accountToken: JSON.stringify(credentials) });
+    const connector = intacctConnector({ sender: { senderId: "s", senderPassword: "p" }, credentials, fetch: fake });
+    const res = await runSync(db, a.companyId, { trigger: "initial", actorId: a.userId, today: "2026-09-30", connector });
+    expect(res).toMatchObject({ status: "done", inserted: 2, outOfBalance: [] });
+    const checks = await listPeriodChecks(db, a.companyId);
+    expect(checks.find((c) => c.period === "2026-09")?.status).toBe("balanced");
+    const [stored] = await withCompany(db, a.companyId, (tx) => tx.execute<{ t: string }>(sql`select account_token_enc as t from connections`));
+    expect(stored!.t).not.toContain("vantiq_ws");
   });
 });

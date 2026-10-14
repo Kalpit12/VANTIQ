@@ -30,7 +30,20 @@ export default defineConfig({
       url: "http://localhost:3101/sign-in",
       timeout: 120_000,
       reuseExistingServer: true,
-      env: { DATABASE_URL: E2E_DATABASE_URL, CRON_SECRET: "e2e-cron-secret" },
+      env: {
+        DATABASE_URL: E2E_DATABASE_URL,
+        CRON_SECRET: "e2e-cron-secret",
+        CONNECTION_SECRET_KEY: "e2e-connection-secret",
+        INTACCT_SENDER_ID: "vantiq-e2e",
+        INTACCT_SENDER_PASSWORD: "e2e-sender",
+        INTACCT_ENDPOINT: "http://localhost:3199/ia/xml/xmlgw.phtml",
+      },
+    },
+    {
+      command: "node tests/e2e/fake-intacct.mjs",
+      url: "http://localhost:3199",
+      reuseExistingServer: true,
+      env: { PORT: "3199", FAKE_INTACCT_ACCEPTS: "intacct-pw" },
     },
   ],
 });

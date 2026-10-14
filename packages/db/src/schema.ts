@@ -158,7 +158,7 @@ export const imports = pgTable(
 );
 
 export const CONNECTION_STATUS = ["active", "error"] as const;
-export type ConnectionProvider = "quickbooks" | "merge" | "sandbox";
+export type ConnectionProvider = "quickbooks" | "sage_intacct" | "merge" | "sandbox";
 
 /**
  * A company's link to its accounting system. One per company. The provider's

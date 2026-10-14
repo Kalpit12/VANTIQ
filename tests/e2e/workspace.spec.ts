@@ -525,3 +525,23 @@ test("notifications: forgot password by email, invitation and close emails, and 
   await guest.getByRole("button", { name: "Send reset link" }).click();
   await expect(guest.getByText(`If ${email} has a Vantiq account, a link to reset the password is on its way.`)).toBeVisible({ timeout: 15_000 });
 });
+
+test("connect Sage Intacct with a Web Services user and sync", async ({ page }) => {
+  await signUp(page, "Intacct Bio");
+  await page.goto("/connections");
+  const card = page.locator("div").filter({ has: page.getByRole("heading", { name: "Sage Intacct" }) }).last();
+  await expect(card.getByText("Connects with a Web Services user")).toBeVisible();
+  await page.getByRole("button", { name: "Connect Sage Intacct" }).click();
+  await page.getByLabel("Company ID").fill("helix-bio");
+  await page.getByLabel("Web Services user ID").fill("vantiq_ws");
+  await page.getByLabel("Password").fill("wrong");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByText("Sage Intacct did not accept the company ID, user or password.")).toBeVisible();
+
+  await expect(page.getByLabel("Company ID")).toHaveValue("helix-bio");
+  await page.getByLabel("Password").fill("intacct-pw");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sage Intacct" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("All 24 months match Sage Intacct.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /First sync/ })).toBeVisible();
+});

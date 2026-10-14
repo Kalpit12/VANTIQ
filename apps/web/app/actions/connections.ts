@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { can, ConnectionError, createConnection, deleteConnection, hasAnyData, loadSampleBudget, runSync } from "@vantiq/db";
-import { ACCOUNTING_SYSTEMS, ConnectorError, createMergeLinkToken, exchangeMergePublicToken } from "@vantiq/integrations";
+import { can, ConnectionError, createConnection, deleteConnection, hasAnyData, intacctSender, loadSampleBudget, runSync } from "@vantiq/db";
+import { ACCOUNTING_SYSTEMS, ConnectorError, createMergeLinkToken, exchangeMergePublicToken, verifyIntacct, type IntacctCredentials } from "@vantiq/integrations";
 import { requireMember } from "@/lib/data";
 
 const message = (e: unknown) => (e instanceof ConnectionError || e instanceof ConnectorError ? e.message : e instanceof Error ? e.message : "Something went wrong.");
@@ -33,6 +33,37 @@ export async function mergeConnectAction(publicToken: string): Promise<{ error?:
   }
   revalidatePath("/", "layout");
   return {};
+}
+
+export interface IntacctFormState {
+  error?: string;
+  values?: { companyId?: string; userId?: string; entityId?: string; programDimension?: string };
+}
+
+/** Sage Intacct signs in with a Web Services user: check the credentials, store them sealed, then run the first 24-month sync. */
+export async function intacctConnectAction(_: IntacctFormState, form: FormData): Promise<IntacctFormState> {
+  const get = (k: string) => String(form.get(k) ?? "").trim();
+  const credentials: IntacctCredentials = {
+    companyId: get("companyId"),
+    userId: get("userId"),
+    password: String(form.get("password") ?? ""),
+    entityId: get("entityId") || undefined,
+    programDimension: get("programDimension") === "class" ? "class" : "project",
+  };
+  const values = { companyId: credentials.companyId, userId: credentials.userId, entityId: credentials.entityId, programDimension: credentials.programDimension };
+  if (!credentials.companyId || !credentials.userId || !credentials.password) return { error: "Enter the company ID, Web Services user ID and password.", values };
+  try {
+    const { db, companyId, userId } = await requireMember(can.importData);
+    const sender = intacctSender();
+    if (!sender || !process.env.CONNECTION_SECRET_KEY) return { error: "Connecting Sage Intacct needs INTACCT_SENDER_ID, INTACCT_SENDER_PASSWORD and CONNECTION_SECRET_KEY on the server.", values };
+    await verifyIntacct({ sender, credentials, endpoint: process.env.INTACCT_ENDPOINT || undefined });
+    await createConnection(db, companyId, userId, { provider: "sage_intacct", systemName: "Sage Intacct", accountToken: JSON.stringify(credentials) });
+    await runSync(db, companyId, { trigger: "initial", actorId: userId });
+  } catch (e) {
+    return { error: message(e), values };
+  }
+  revalidatePath("/", "layout");
+  redirect("/connections");
 }
 
 /** Practice books: a pretend QuickBooks holding the Helixa sample, plus its budget file. Empty companies only. */

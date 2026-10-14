@@ -1,9 +1,10 @@
-import { can, getConnection, getDb, listPeriodChecks, listSyncRuns, quickbooksApp } from "@vantiq/db";
+import { can, getConnection, getDb, intacctSender, listPeriodChecks, listSyncRuns, quickbooksApp } from "@vantiq/db";
 import { formatCompactCurrency, formatCurrency, periodLabel } from "@vantiq/domain";
 import { ACCOUNTING_SYSTEMS } from "@vantiq/integrations";
 import { connectSandboxAction, disconnectAction, syncNowAction } from "@/app/actions/connections";
 import { SubmitButton } from "@/components/AuthForm";
 import { ConnectSystem } from "@/components/ConnectSystem";
+import { IntacctConnect } from "@/components/IntacctConnect";
 import { DemoNotice } from "@/components/DemoNotice";
 import { Card, PageHeader, StatusPill } from "@/components/ui";
 import { getWorkspace } from "@/lib/data";
@@ -50,11 +51,16 @@ function NotConnected({ allowed, empty }: { allowed: boolean; empty: boolean }) 
   const merge = Boolean(process.env.MERGE_API_KEY && process.env.CONNECTION_SECRET_KEY);
   // QuickBooks can also connect directly through Intuit, which is free while testing.
   const quickbooks = Boolean(quickbooksApp() && process.env.CONNECTION_SECRET_KEY);
+  // So can Sage Intacct, with a Web Services user the customer creates.
+  const intacct = Boolean(intacctSender() && process.env.CONNECTION_SECRET_KEY);
+  const directNames = [quickbooks && "QuickBooks", intacct && "Sage Intacct"].filter(Boolean) as string[];
+  const later = ACCOUNTING_SYSTEMS.filter((s) => !(s.id === "quickbooks" && quickbooks) && !(s.id === "sage_intacct" && intacct)).map((s) => s.name);
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {ACCOUNTING_SYSTEMS.map((s) => {
           const direct = s.id === "quickbooks" && quickbooks;
+          const directIntacct = s.id === "sage_intacct" && intacct;
           return (
             <Card key={s.id} className="flex flex-col p-4">
               <div className="flex items-center gap-3">
@@ -63,11 +69,13 @@ function NotConnected({ allowed, empty }: { allowed: boolean; empty: boolean }) 
                 </span>
                 <div>
                   <h2 className="text-[14px] font-semibold text-ink">{s.name}</h2>
-                  <p className="text-[12px] text-ink-3">{direct ? "Connects directly through Intuit" : merge ? "Ledger, accounts, classes" : "Arrives at launch"}</p>
+                  <p className="text-[12px] text-ink-3">{direct ? "Connects directly through Intuit" : directIntacct ? "Connects with a Web Services user" : merge ? "Ledger, accounts, classes" : "Arrives at launch"}</p>
                 </div>
               </div>
               {allowed &&
-                (direct ? (
+                (directIntacct ? (
+                  <IntacctConnect />
+                ) : direct ? (
                   <div className="mt-auto pt-3">
                     <a
                       href="/api/connect/quickbooks"
@@ -87,8 +95,8 @@ function NotConnected({ allowed, empty }: { allowed: boolean; empty: boolean }) 
       {!allowed && <p className="mt-3 text-[13px] text-ink-2">Your role can view numbers but not connect systems. Ask an admin or someone in Finance.</p>}
       {allowed && !merge && (
         <p className="mt-3 text-[13px] text-ink-2">
-          {quickbooks
-            ? "QuickBooks connects directly. Xero, NetSuite and Sage Intacct arrive at launch."
+          {directNames.length
+            ? `${directNames.join(" and ")} ${directNames.length > 1 ? "connect" : "connects"} directly. ${listJoin(later)} arrive at launch.`
             : "Connecting a real system isn't set up on this server yet. Until then, try the sandbox below."}
         </p>
       )}
@@ -97,7 +105,7 @@ function NotConnected({ allowed, empty }: { allowed: boolean; empty: boolean }) 
         <ul className="mt-2 grid gap-1.5 text-[13px] text-ink-2 sm:grid-cols-3">
           <li>Reads the last 24 months of profit-and-loss lines, then only what changed.</li>
           <li>Checks each month&apos;s net income against your system&apos;s own report.</li>
-          <li>Never writes to your books. Vantiq stores an encrypted access token, not your password.</li>
+          <li>Never writes to your books. Whatever Vantiq needs to sign in is stored encrypted.</li>
         </ul>
       </Card>
       {allowed && empty && (
@@ -222,3 +230,5 @@ async function Connected({ conn, companyId, allowed }: { conn: NonNullable<Await
     </>
   );
 }
+
+const listJoin = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
