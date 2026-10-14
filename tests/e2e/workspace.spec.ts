@@ -73,7 +73,9 @@ test("companies are isolated and viewers cannot import", async ({ page, browser 
   await page.getByRole("button", { name: "Try it with sample data" }).click();
   await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
 
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Members" }).click();
+  await expect(page.getByRole("heading", { name: "Add someone" })).toBeVisible();
   const viewerEmail = `viewer-${Date.now()}@example.com`;
   await page.getByLabel("Name").fill("Val Viewer");
   await page.getByLabel("Work email").fill(viewerEmail);
@@ -158,7 +160,86 @@ test("draft explanations, then accept one and edit another", async ({ page }) =>
   await expect(block.getByText("Edited and confirmed by Casey CFO")).toBeVisible();
 
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("link", { name: "Overview" }).click();
   await expect(page.getByText("Harbor Legal reviewed the licensing term sheet; a one-off cost.")).toBeVisible();
   await expect(page.getByText("Confirmed")).toHaveCount(2);
+});
+
+test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the pack, PDF, audit log", async ({ page }) => {
+  await signUp(page, "Gate Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  // Mapping
+  await page.goto("/mappings");
+  await page.getByRole("button", { name: "Confirm all 11 suggestions" }).click();
+  await expect(page.getByText("Every account is mapped and confirmed.")).toBeVisible();
+
+  // Overview and drill-down
+  await page.getByRole("link", { name: "Overview" }).click();
+  await page.getByRole("link", { name: /CRO and clinical fees/ }).first().click();
+  await expect(page.getByRole("dialog")).toContainText("Meridian Clinical Research");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The pack can't be approved until material lines are explained
+  await page.getByRole("link", { name: "Review pack" }).click();
+  await expect(page.getByRole("heading", { name: "Review pack" })).toBeVisible();
+  await expect(page.getByText("2 of 2 material lines still need an accepted or edited explanation.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve Sep 2026" })).toBeDisabled();
+
+  await page.getByRole("link", { name: "Fix this →" }).click();
+  await page.getByRole("button", { name: /^Draft 2 explanations$/ }).click();
+  const table = page.getByRole("table").last();
+  const block = page.getByRole("dialog").getByRole("region", { name: "Explanation" });
+  for (const name of [/HX-101 ran/, /Harbor Legal/]) {
+    await table.getByRole("link", { name }).click();
+    await block.getByRole("button", { name: "Accept" }).click();
+    await expect(block.getByText("Confirmed by Casey CFO")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  // Approve: the month locks
+  await page.getByRole("link", { name: "Review pack" }).click();
+  await expect(page.getByText("Ready to approve.")).toBeVisible();
+  await page.getByRole("button", { name: "Approve Sep 2026" }).click();
+  await expect(page.getByText(/Approved by Casey CFO on/)).toBeVisible();
+  await expect(page.getByText("Accepted by Casey CFO")).toHaveCount(2);
+
+  // PDF export
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download PDF" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("Gate-Bio-review-pack-2026-09.pdf");
+  const head = (await (await file.createReadStream()).toArray()).map((c) => Buffer.from(c)).reduce((a, b) => Buffer.concat([a, b]));
+  expect(head.subarray(0, 5).toString()).toBe("%PDF-");
+
+  // Locked: explanations are read-only
+  await page.goto("/variances?period=2026-09");
+  await expect(page.getByText("Sep 2026 is approved and locked")).toBeVisible();
+  await table.getByRole("link", { name: /HX-101 ran/ }).click();
+  await expect(block.getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // Audit log
+  await page.goto("/settings/audit");
+  for (const text of ["Downloaded the Sep 2026 review pack as PDF", "Approved the Sep 2026 review pack", "Accepted the explanation for Professional fees · Sep 2026", "Imported ledger file helixa-general-ledger.csv"]) {
+    await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
+  }
+  await page.getByRole("link", { name: "Review packs" }).click();
+  await expect(page.getByRole("row")).toHaveCount(3);
+  const csv = await page.request.get("/settings/audit/export");
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  expect(await csv.text()).toContain("pack.approved");
+
+  // Reopen with a reason
+  await page.goto("/pack?period=2026-09");
+  await page.getByText("Reopen month").click();
+  await page.getByLabel("Why? This goes in the audit log.").fill("Late CRO invoice");
+  await page.getByRole("button", { name: "Reopen" }).click();
+  await expect(page.getByText(/Reopened by Casey CFO/)).toBeVisible();
+  await page.goto("/settings");
+  await expect(page.getByText("Reopened by Casey CFO")).toBeVisible();
 });

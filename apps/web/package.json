@@ -10,6 +10,7 @@
     "test": "echo 'web: covered by e2e (tests/e2e)'"
   },
   "dependencies": {
+    "@react-pdf/renderer": "4.9.0",
     "@vantiq/ai": "workspace:*",
     "@vantiq/db": "workspace:*",
     "@vantiq/domain": "workspace:*",

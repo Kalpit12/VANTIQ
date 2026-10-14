@@ -10,6 +10,7 @@
     "e2e": "pnpm --filter @vantiq/web exec next build && playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.3",
     "@playwright/test": "1.56.0",
     "typescript": "5.9.3"
   }

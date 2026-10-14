@@ -29,7 +29,7 @@ export function VarianceBridge({ steps }: { steps: BridgeStep[] }) {
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Variance bridge from budget to actual">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="group" aria-label="Variance bridge from budget to actual">
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.left} x2={W - pad.right} y1={y(t)} y2={y(t)} stroke="var(--grid)" />

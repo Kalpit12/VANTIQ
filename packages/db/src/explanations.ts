@@ -2,6 +2,7 @@ import type { Period } from "@vantiq/domain";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "./client";
 import { auditEvents, explanations, users, type ExplanationStatus } from "./schema";
+import { isPeriodLocked, lockedMessage } from "./packs";
 import { withCompany } from "./tenant";
 
 /** `2026-09` for one month, `2026-01..2026-09` for a range. */
@@ -63,6 +64,7 @@ export async function saveDrafts(db: Db, companyId: string, actorId: string | nu
   if (!drafts.length) return 0;
   const scope = scopeOf(periods);
   return withCompany(db, companyId, async (tx) => {
+    if (periods.length === 1 && (await isPeriodLocked(tx, scope))) throw new Error(lockedMessage(scope));
     const existing = await tx
       .select({ categoryId: explanations.categoryId, status: explanations.status })
       .from(explanations)
@@ -108,6 +110,7 @@ export async function decideExplanation(
   const text = decision.action === "edit" ? decision.text.trim() : null;
   if (decision.action === "edit" && (!text || text.length > 1200)) throw new Error("Write the explanation in 1,200 characters or fewer.");
   await withCompany(db, companyId, async (tx) => {
+    if (periods.length === 1 && (await isPeriodLocked(tx, scope))) throw new Error(lockedMessage(scope));
     const status: ExplanationStatus = decision.action === "accept" ? "accepted" : decision.action === "reject" ? "rejected" : "edited";
     const [row] = await tx
       .update(explanations)

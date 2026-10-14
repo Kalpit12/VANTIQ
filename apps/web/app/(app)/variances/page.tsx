@@ -23,6 +23,7 @@ import { SubmitButton } from "@/components/AuthForm";
 import { ExplanationBlock } from "@/components/ExplanationBlock";
 import { ExplanationCell } from "@/components/ExplanationCell";
 import { explanationsFor, materialCategoryIds } from "@/lib/explanations";
+import { monthLocked } from "@/lib/pack";
 
 export default async function VariancesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -44,7 +45,8 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
   const biggest = [...opexLeaves].sort((a, b) => Math.abs(b.variance.delta) - Math.abs(a.variance.delta))[0];
   const material = rows.filter((r) => !r.hasChildren && isMaterial(r.variance));
   const expl = await explanationsFor(ws, view.periods);
-  const canExplain = ws.mode === "db" && can.explain(ws.role);
+  const locked = await monthLocked(ws, view.periods);
+  const canExplain = ws.mode === "db" && can.explain(ws.role) && !locked;
   const missing = materialCategoryIds(ledger, view.periods).filter((id) => !expl.has(id));
   const back = href("/variances", sp, { xerr: null });
   const dc = one(sp, "dc");
@@ -76,6 +78,14 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
         )}
       </PageHeader>
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
+      {locked && (
+        <p className="mb-4 rounded-md bg-accent-subtle px-3 py-2 text-[13px] text-ink">
+          {view.label} is approved and locked, so its explanations can&apos;t change.{" "}
+          <Link href={`/pack?period=${view.period}`} className="font-medium text-accent hover:underline">
+            Open the review pack →
+          </Link>
+        </p>
+      )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-5">
         <ChartCard

@@ -64,7 +64,7 @@ The app is a **modular monolith**: one deployable web app plus one worker proces
 | Auth | Auth.js (email + Google/Microsoft) in Phase 1; WorkOS for SAML SSO and SCIM in Phase 3 | Session cookies, httpOnly |
 | Accounting data | Unified API provider (Merge, Codat or Rutter; pick after a spike) | One integration covers QuickBooks Online, Xero, NetSuite, Sage Intacct; native SAP connector in Phase 3 |
 | AI | Claude API via `@anthropic-ai/sdk` | See section 8 |
-| PDF export | Playwright rendering the review pack page to PDF | Same layout on screen and in PDF |
+| PDF export | `@react-pdf/renderer` on the server, from the same data as the pack page (Phase 1); Playwright rendering later if the PDF must match the page pixel for pixel | Same content on screen and in PDF |
 | File storage | S3-compatible (AWS S3 or Cloudflare R2) | Encrypted, signed URLs |
 | Email | Resend or Postmark | Invites, review requests, approvals |
 | Hosting | Vercel (web) + Fly.io or AWS (worker) in Phase 1; AWS with US and EU regions in Phase 3 | |
@@ -161,11 +161,13 @@ CSV/Excel upload follows the same path from step 3, with a column-mapping step.
 
 After every sync, a job compares Vantiq's trial balance per period to the source system's trial balance. Any difference above $1 marks the period "Out of balance" in the UI and blocks pack approval.
 
-Phase 1 implementation (milestone 4): Vantiq stores only profit-and-loss lines, so the check compares each month's **net income** (the sum of synced lines) with the net income on the source system's own monthly income statement, read through Merge. Results live in `period_checks`; months the source can't report show "No report". Pack approval blocking arrives with milestone 6.
+Phase 1 implementation (milestone 4): Vantiq stores only profit-and-loss lines, so the check compares each month's **net income** (the sum of synced lines) with the net income on the source system's own monthly income statement, read through Merge. Results live in `period_checks`; months the source can't report show "No report". Since milestone 6, an out-of-balance month can't be approved.
 
 ### 6.3 Locking
 
 When a review pack is approved, its period is locked: its numbers, explanations and comments are snapshotted. Later syncs that change a locked period raise a "Post-close change" alert instead of silently changing the pack.
+
+Phase 1 implementation (milestone 6): the snapshot is the pack's full data in `review_packs.snapshot`; the alert is computed when the pack is opened by comparing the snapshot with the live books. Reopening needs an Admin and a reason, both audited.
 
 ---
 
@@ -262,7 +264,7 @@ Test gate (all must pass):
 - [ ] Integration tests against the unified API sandbox for each provider.
 - [ ] Tenant isolation test suite passes for every route.
 - [ ] AI evals: citation validity 100%, driver correctness ≥ 85% on the eval set.
-- [ ] Playwright e2e: onboarding → mapping → overview → drill-down → explanation accept → PDF export.
+- [x] Playwright e2e: onboarding → mapping → overview → drill-down → explanation accept → PDF export.
 - [ ] Accessibility: axe checks pass on all Phase 1 screens; design.md Phase 1 checks pass.
 - [ ] Charts C1–C10 built in `packages/ui/charts`, visual snapshots approved, chart totals match tables.
 - [ ] Pilot: 2–3 friendly biotechs run one real monthly review in Vantiq.

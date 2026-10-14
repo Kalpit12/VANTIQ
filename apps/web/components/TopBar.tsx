@@ -22,7 +22,9 @@ export function TopBar({
   const mode = sp.get("mode") === "ytd" ? "ytd" : "month";
   const periods = firstPeriod && latestPeriod ? periodRange(firstPeriod, latestPeriod).reverse() : [];
   // Period controls only apply to the review screens.
-  const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings)/.test(pathname);
+  const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings|connections)/.test(pathname);
+  // A review pack is always one month.
+  const showMode = !pathname.startsWith("/pack");
 
   const go = (changes: Record<string, string>) => {
     const q = new URLSearchParams(sp.toString());
@@ -54,6 +56,7 @@ export function TopBar({
             </option>
           ))}
         </select>
+        {showMode && (
         <div role="group" aria-label="Period type" className="flex h-8 overflow-hidden rounded-md border border-line-strong text-[13px]">
           {(["month", "ytd"] as const).map((m) => (
             <button
@@ -67,6 +70,7 @@ export function TopBar({
             </button>
           ))}
         </div>
+        )}
         <span className="text-[13px] text-ink-3">vs Budget</span>
       </div>
       )}

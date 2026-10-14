@@ -3,6 +3,7 @@ import { formatDate } from "@vantiq/domain";
 import { redirect } from "next/navigation";
 import { setRoleAction } from "@/app/actions/data";
 import { AddMemberForm } from "@/components/AddMemberForm";
+import { SettingsTabs } from "@/components/SettingsTabs";
 import { Card, PageHeader } from "@/components/ui";
 import { getWorkspace } from "@/lib/data";
 import { one, type SearchParams } from "@/lib/view";
@@ -23,7 +24,8 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
   const error = one(sp, "error");
   return (
     <>
-      <PageHeader title="Members" subtitle={`People who can see ${ws.companyName} in Vantiq`} />
+      <PageHeader title="Settings" subtitle={`People who can see ${ws.companyName} in Vantiq`} />
+      <SettingsTabs role={ws.role} active="members" />
       {error && (
         <p role="alert" className="mb-4 rounded-md bg-bad/10 px-3 py-2 text-[13px] text-bad">
           {error}
