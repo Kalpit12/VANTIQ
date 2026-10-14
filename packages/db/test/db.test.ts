@@ -1,5 +1,5 @@
-import { Ledger, periodRange } from "@vantiq/domain";
-import { generateSampleCompany, sampleFiles } from "@vantiq/fixtures";
+import { billedForTrial, estimateAccrual, Ledger, periodRange } from "@vantiq/domain";
+import { generateSampleCompany, generateSampleTrials, sampleFiles } from "@vantiq/fixtures";
 import { guessColumns, parseCsv, sandboxConnector } from "@vantiq/integrations";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -46,6 +46,12 @@ import {
   recordPackExport,
   renameCompany,
   reopenPack,
+  addChangeOrder,
+  createTrial,
+  importActivity,
+  listTrials,
+  saveActivity,
+  TrialError,
   type Db,
 } from "../src";
 
@@ -377,6 +383,68 @@ describe("review packs and audit log", () => {
     expect((await listAuditEvents(db, a.companyId, { area: "pack" })).map((e) => e.action)).toEqual(["pack.exported", "pack.approved"]);
     expect((await listAuditEvents(db, a.companyId, { before: all[1]!.at })).map((e) => e.action)).toEqual(["pack.approved"]);
     expect((await getSession(db, a.token))?.company?.name).toBe("Audit Co Inc");
+  });
+});
+
+describe("clinical trials", () => {
+  const items = [
+    { driver: "monthly" as const, unitCost: 10_000_00, units: 12 },
+    { driver: "visit" as const, unitCost: 500_00, units: 100 },
+  ];
+  const input = { code: "HX-9-001", name: "Test study", programCode: "HX-9", croName: "Test CRO", phase: "Phase 1", start: "2026-01", end: "2026-12", items };
+
+  it("stores a trial, its change orders and CRO activity", async () => {
+    const a = await freshCompany("Trial Co");
+    const id = await createTrial(db, a.companyId, a.userId, input);
+    await expect(createTrial(db, a.companyId, a.userId, input)).rejects.toThrow(/already a trial/);
+    await expect(createTrial(db, a.companyId, a.userId, { ...input, code: "X", end: "2025-12" })).rejects.toThrow(TrialError);
+    await expect(createTrial(db, a.companyId, a.userId, { ...input, code: "X", items: [{ driver: "visit", unitCost: 0, units: 0 }] })).rejects.toThrow(/priced line/);
+
+    expect(await addChangeOrder(db, a.companyId, a.userId, id, { effective: "2026-03", description: "More visits", items: [{ driver: "visit", unitCost: 600_00, units: 50 }] })).toBe(1);
+    expect(await addChangeOrder(db, a.companyId, a.userId, id, { effective: "2026-05", description: "Extension", items: [{ driver: "monthly", unitCost: 10_000_00, units: 3 }] })).toBe(2);
+    await saveActivity(db, a.companyId, a.userId, id, [{ period: "2026-01", sites: 1, patients: 2, visits: 10 }], "manual");
+    await saveActivity(db, a.companyId, a.userId, id, [{ period: "2026-01", sites: 1, patients: 2, visits: 12 }, { period: "2026-02", sites: 0, patients: 1, visits: 20 }], "manual");
+    await expect(saveActivity(db, a.companyId, a.userId, id, [{ period: "2026-02", sites: -1, patients: 0, visits: 0 }], "manual")).rejects.toThrow(/whole number/);
+
+    const [t] = await listTrials(db, a.companyId);
+    expect(t).toMatchObject({ code: "HX-9-001", croName: "Test CRO", end: "2026-12" });
+    expect(t!.contract.changeOrders.map((c) => c.number)).toEqual([1, 2]);
+    expect(t!.activity.map((x) => [x.period, x.visits])).toEqual([["2026-01", 12], ["2026-02", 20]]);
+    expect(estimateAccrual(t!.contract, t!.activity, new Map(), "2026-02").earned).toBe(2 * 10_000_00 + 32 * 500_00);
+
+    const other = await freshCompany("Other Trial Co");
+    expect(await listTrials(db, other.companyId)).toEqual([]);
+    const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'trial.%'`));
+    expect(audit.map((r) => r.action).sort()).toEqual(["trial.activity", "trial.activity", "trial.change_order", "trial.change_order", "trial.created"]);
+  });
+
+  it("imports a CRO activity report and lists the rows it skipped", async () => {
+    const a = await freshCompany("Import Trial Co");
+    await createTrial(db, a.companyId, a.userId, input);
+    const table = parseCsv(
+      ["Study ID,Month,Sites activated,Patients enrolled,Visits", "HX-9-001,2026-01,2,3,40", "hx-9-001,02/2026,0,1,\"1,050\"", "HX-9-001,Mar 2026,,,", "NOPE,2026-01,1,1,1", "HX-9-001,someday,1,1,1", "HX-9-001,2026-04,1.5,1,1"].join("\n"),
+    );
+    const res = await importActivity(db, a.companyId, a.userId, table);
+    expect(res.saved).toEqual([{ trial: "HX-9-001", months: 3 }]);
+    expect(res.errors).toEqual(['Row 5: no trial "NOPE".', 'Row 6: "someday" is not a month.', "Row 7: counts must be whole numbers of zero or more."]);
+    const [t] = await listTrials(db, a.companyId);
+    expect(t!.activity.map((x) => [x.period, x.sites, x.patients, x.visits])).toEqual([["2026-01", 2, 3, 40], ["2026-02", 0, 1, 1050], ["2026-03", 0, 0, 0]]);
+    await expect(importActivity(db, a.companyId, a.userId, parseCsv("Trial,Month\nHX-9-001,2026-01"))).rejects.toThrow(/Missing: sites, patients, visits/);
+  });
+
+  it("loads the sample trials with the sample books, and their accruals match the fixtures", async () => {
+    const a = await freshCompany("Sample Trial Co");
+    await loadSampleData(db, a.companyId, a.userId);
+    await loadSampleData(db, a.companyId, a.userId).catch(() => undefined); // a second load never duplicates trials
+    const stored = await listTrials(db, a.companyId);
+    expect(stored.map((t) => t.code)).toEqual(["HX-101-201", "HX-204-101"]);
+    const ledger = (await loadLedger(db, a.companyId)).data;
+    const fixture = new Ledger(generateSampleCompany()).data;
+    for (const [i, t] of generateSampleTrials().entries()) {
+      const mine = estimateAccrual(stored[i]!.contract, stored[i]!.activity, billedForTrial(ledger, stored[i]!), "2026-09");
+      const expected = estimateAccrual(t.contract, t.activity, billedForTrial(fixture, t), "2026-09");
+      expect(mine.accrual).toBe(expected.accrual);
+    }
   });
 });
 

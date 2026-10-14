@@ -13,3 +13,4 @@ export { encryptSecret, decryptSecret } from "./secrets";
 export * from "./explanations";
 export * from "./packs";
 export * from "./audit";
+export * from "./trials";

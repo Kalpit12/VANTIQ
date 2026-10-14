@@ -17,6 +17,7 @@ export const AUDIT_AREAS = [
   { key: "connection", label: "Connections" },
   { key: "sync", label: "Syncs" },
   { key: "member", label: "Members" },
+  { key: "trial", label: "Trials" },
   { key: "company", label: "Company" },
 ] as const;
 
@@ -55,6 +56,14 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
       return `Added ${e.target} as ${String(d.role ?? "member")}`;
     case "member.role_changed":
       return `Changed a member's role to ${String(d.role ?? "")}`;
+    case "trial.created":
+      return `Added trial ${e.target} (${String(d.cro ?? "")})`;
+    case "trial.change_order":
+      return `Added change order ${Number(d.number ?? 0)} to ${e.target}, effective ${month(String(d.effective ?? ""))}: ${String(d.description ?? "")}`;
+    case "trial.activity":
+      return `${d.source === "import" ? "Imported" : "Recorded"} CRO activity for ${e.target}: ${Array.isArray(d.months) ? (d.months as string[]).map(month).join(", ") : ""}`;
+    case "trial.journal_exported":
+      return `Downloaded accrual journal entries for ${month(e.target)}${Array.isArray(d.trials) ? ` (${(d.trials as string[]).join(", ")})` : ""}`;
     case "company.renamed":
       return `Renamed the company from “${String(d.from ?? "")}” to “${e.target}”`;
     default:

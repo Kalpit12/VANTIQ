@@ -341,6 +341,58 @@ export const reviewPacks = pgTable(
   (t) => [uniqueIndex("review_packs_period_idx").on(t.companyId, t.period)],
 );
 
+/**
+ * A clinical trial and its CRO contract. The contract lines and change orders
+ * are small and always read together, so they live as JSON on the trial
+ * (shapes from @vantiq/domain: ContractItem[] and ChangeOrder[]).
+ */
+export const trials = pgTable(
+  "trials",
+  {
+    id: id(),
+    companyId: companyId(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    programCode: text("program_code"),
+    croName: text("cro_name").notNull(),
+    phase: text("phase").notNull(),
+    startPeriod: char("start_period", { length: 7 }).notNull(),
+    endPeriod: char("end_period", { length: 7 }).notNull(),
+    items: jsonb("items").$type<ContractItemJson[]>().notNull(),
+    changeOrders: jsonb("change_orders").$type<ChangeOrderJson[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("trials_code_idx").on(t.companyId, t.code)],
+);
+
+export interface ContractItemJson {
+  driver: "monthly" | "site" | "patient" | "visit";
+  unitCost: number;
+  units: number;
+}
+export interface ChangeOrderJson {
+  number: number;
+  effective: string;
+  description: string;
+  items: ContractItemJson[];
+}
+
+/** New activity a CRO reported for one trial and month (not cumulative). */
+export const trialActivity = pgTable(
+  "trial_activity",
+  {
+    companyId: companyId(),
+    trialId: uuid("trial_id").notNull().references(() => trials.id, { onDelete: "cascade" }),
+    period: char("period", { length: 7 }).notNull(),
+    sites: integer("sites").notNull().default(0),
+    patients: integer("patients").notNull().default(0),
+    visits: integer("visits").notNull().default(0),
+    source: text("source").$type<"manual" | "import" | "sample">().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.trialId, t.period] })],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -358,4 +410,6 @@ export const TENANT_TABLES = [
   "period_checks",
   "explanations",
   "review_packs",
+  "trials",
+  "trial_activity",
 ] as const;
