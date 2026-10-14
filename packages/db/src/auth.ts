@@ -2,6 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "no
 import { promisify } from "node:util";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "./client";
+import { createEmailToken, INVITED, queueEmail, useEmailToken } from "./notify";
 import { auditEvents, companies, memberships, sessions, users, type Role } from "./schema";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: { N: number; r: number; p: number }) => Promise<Buffer>;
@@ -123,7 +124,7 @@ export const can = {
 
 export async function listMembers(db: Db, companyId: string) {
   return db
-    .select({ id: users.id, name: users.name, email: users.email, role: memberships.role, since: memberships.createdAt })
+    .select({ id: users.id, name: users.name, email: users.email, role: memberships.role, since: memberships.createdAt, pending: sql<boolean>`${users.passwordHash} = ${INVITED}` })
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(eq(memberships.companyId, companyId))
@@ -131,25 +132,103 @@ export async function listMembers(db: Db, companyId: string) {
 }
 
 /**
- * Adds someone to a company. A new user gets a temporary password that the
- * admin passes on; email invitations arrive with the notifications milestone.
+ * Adds someone to a company and emails them. Someone new gets an invitation
+ * link to set their password (valid for 7 days); someone who already uses
+ * Vantiq gets a note that they were added. Returns the invitation token so
+ * the admin can pass the link on when email isn't set up.
  */
 export async function addMember(db: Db, actorId: string, companyId: string, input: { name: string; email: string; role: Role }) {
   const email = normEmail(input.email);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new AuthError("Enter a valid email address.");
   return db.transaction(async (tx) => {
-    let [u] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`);
-    let tempPassword: string | null = null;
-    if (!u) {
-      tempPassword = randomBytes(9).toString("base64url");
-      [u] = await tx.insert(users).values({ email, name: input.name.trim() || email, passwordHash: await hashPassword(tempPassword) }).returning({ id: users.id });
-    }
+    let [u] = await tx.select({ id: users.id, pending: users.passwordHash }).from(users).where(sql`lower(${users.email}) = ${email}`);
+    if (!u) [u] = await tx.insert(users).values({ email, name: input.name.trim() || email, passwordHash: INVITED }).returning({ id: users.id, pending: users.passwordHash });
     const added = await tx.insert(memberships).values({ userId: u!.id, companyId, role: input.role }).onConflictDoNothing().returning();
     if (!added.length) throw new AuthError("That person is already a member.");
+    const [names] = await tx
+      .select({ company: companies.name, actor: users.name })
+      .from(companies)
+      .innerJoin(users, eq(users.id, actorId))
+      .where(eq(companies.id, companyId));
+    let inviteToken: string | null = null;
+    if (u!.pending.startsWith(INVITED)) {
+      inviteToken = await createEmailToken(tx, u!.id, "invite", companyId, 24 * 7);
+      await queueEmail(tx, {
+        companyId,
+        userId: u!.id,
+        to: email,
+        kind: "invite",
+        subject: `${names!.actor} invited you to ${names!.company} on Vantiq`,
+        body: `${names!.actor} invited you to join ${names!.company} on Vantiq Finance as ${ROLE_LABEL[input.role]}.\n\nSet your password to get started (the link works for 7 days):\n{{origin}}/invite/${inviteToken}`,
+      });
+    } else {
+      await queueEmail(tx, {
+        companyId,
+        userId: u!.id,
+        to: email,
+        kind: "added",
+        subject: `You now have access to ${names!.company} on Vantiq`,
+        body: `${names!.actor} added you to ${names!.company} on Vantiq Finance as ${ROLE_LABEL[input.role]}. Sign in with your usual password and switch to it from the company menu:\n{{origin}}/sign-in`,
+      });
+    }
     await tx.execute(sql`select set_config('app.company_id', ${companyId}, true)`);
-    await tx.insert(auditEvents).values({ companyId, actorId, action: "member.added", target: email, detail: { role: input.role } });
-    return { tempPassword };
+    await tx.insert(auditEvents).values({ companyId, actorId, action: "member.added", target: email, detail: { role: input.role, invited: !!inviteToken } });
+    return { inviteToken };
   });
+}
+
+const ROLE_LABEL: Record<Role, string> = { admin: "an admin", finance: "a member of the finance team", viewer: "a viewer" };
+
+/** Sets the invited person's password from their invitation link and signs them in to that company. */
+export async function acceptInvite(db: Db, token: string, password: string) {
+  if (password.length < MIN_PASSWORD) throw new AuthError(`Use a password of at least ${MIN_PASSWORD} characters.`);
+  const passwordHash = await hashPassword(password);
+  const { userId, companyId } = await db.transaction(async (tx) => {
+    const t = await useEmailToken(tx, token, "invite").catch((e: Error) => {
+      throw new AuthError(e.message);
+    });
+    await tx.update(users).set({ passwordHash }).where(eq(users.id, t.userId));
+    return { userId: t.userId, companyId: t.companyId };
+  });
+  return createSession(db, userId, companyId);
+}
+
+/**
+ * Emails a password reset link (valid for an hour) when the address belongs
+ * to someone. Says nothing either way, so the form can't be used to find out
+ * who has an account.
+ */
+export async function requestPasswordReset(db: Db, emailRaw: string) {
+  const email = normEmail(emailRaw);
+  const [u] = await db.select({ id: users.id, pending: users.passwordHash }).from(users).where(sql`lower(${users.email}) = ${email}`);
+  if (!u || u.pending.startsWith(INVITED)) return;
+  await db.transaction(async (tx) => {
+    const token = await createEmailToken(tx, u.id, "reset", null, 1);
+    await queueEmail(tx, {
+      companyId: null,
+      userId: u.id,
+      to: email,
+      kind: "password_reset",
+      subject: "Reset your Vantiq password",
+      body: `Someone asked to reset the password for ${email} on Vantiq Finance. If it was you, choose a new password here (the link works for an hour):\n{{origin}}/reset-password/${token}\n\nIf it wasn't you, ignore this email and your password stays the same.`,
+    });
+  });
+}
+
+/** Sets a new password from a reset link, signs out every other session and signs in. */
+export async function resetPassword(db: Db, token: string, password: string) {
+  if (password.length < MIN_PASSWORD) throw new AuthError(`Use a password of at least ${MIN_PASSWORD} characters.`);
+  const passwordHash = await hashPassword(password);
+  const userId = await db.transaction(async (tx) => {
+    const t = await useEmailToken(tx, token, "reset").catch((e: Error) => {
+      throw new AuthError(e.message);
+    });
+    await tx.update(users).set({ passwordHash }).where(eq(users.id, t.userId));
+    await tx.delete(sessions).where(eq(sessions.userId, t.userId));
+    return t.userId;
+  });
+  const [m] = await db.select().from(memberships).where(eq(memberships.userId, userId)).orderBy(memberships.createdAt).limit(1);
+  return createSession(db, userId, m?.companyId ?? null);
 }
 
 export async function setMemberRole(db: Db, actorId: string, companyId: string, userId: string, role: Role) {

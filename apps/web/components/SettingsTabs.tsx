@@ -2,10 +2,11 @@ import Link from "next/link";
 import { can, type Role } from "@vantiq/db";
 
 /** Tabs across the settings screens; each only shows to roles that can open it. */
-export function SettingsTabs({ role, active }: { role: Role; active: "general" | "members" | "audit" }) {
+export function SettingsTabs({ role, active }: { role: Role; active: "general" | "members" | "notifications" | "audit" }) {
   const tabs = [
     { key: "general", href: "/settings", label: "Company", show: true },
     { key: "members", href: "/settings/members", label: "Members", show: can.manageMembers(role) },
+    { key: "notifications", href: "/settings/notifications", label: "Notifications", show: true },
     { key: "audit", href: "/settings/audit", label: "Audit log", show: can.viewAudit(role) },
   ].filter((t) => t.show);
   return (

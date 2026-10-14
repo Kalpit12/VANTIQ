@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb, listDueConnections, runSync } from "@vantiq/db";
+import { deliverQueued } from "@/lib/email";
 
 // A first sync of a large ledger can take a while.
 export const maxDuration = 300;
@@ -24,5 +25,7 @@ export async function GET(req: Request) {
     const r = await runSync(db, d.companyId, { trigger: "scheduled" });
     results.push({ connectionId: d.connectionId, status: r.status, inserted: r.inserted, updated: r.updated, deleted: r.deleted, outOfBalance: r.outOfBalance.length });
   }
-  return NextResponse.json({ synced: results.length, results });
+  // Out-of-balance alerts, and anything else still queued, go out now.
+  const emailed = await deliverQueued();
+  return NextResponse.json({ synced: results.length, results, emailed });
 }

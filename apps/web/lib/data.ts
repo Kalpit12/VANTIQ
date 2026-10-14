@@ -1,4 +1,5 @@
 import "server-only";
+import { sendEmailsAfterResponse } from "./email";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -75,5 +76,7 @@ export async function requireMember(check?: (r: Role) => boolean) {
   const s = await currentSession();
   if (!s?.company) throw new Error("Your session has ended. Sign in again.");
   if (check && !check(s.company.role)) throw new Error("Your role can't do this. Ask an admin.");
+  // Anything this change emails goes out once the response has been sent.
+  await sendEmailsAfterResponse();
   return { db: getDb(), session: s, companyId: s.company.id, userId: s.user.id, role: s.company.role };
 }

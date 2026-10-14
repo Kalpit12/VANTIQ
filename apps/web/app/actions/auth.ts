@@ -2,11 +2,13 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AuthError, getDb, signIn, signOut, signUp, switchCompany } from "@vantiq/db";
+import { acceptInvite, AuthError, getDb, requestPasswordReset, resetPassword, signIn, signOut, signUp, switchCompany } from "@vantiq/db";
+import { sendEmailsAfterResponse } from "@/lib/email";
 import { SESSION_COOKIE } from "@/lib/data";
 
 export interface FormState {
   error?: string;
+  notice?: string;
   values?: Record<string, string>;
 }
 
@@ -58,5 +60,35 @@ export async function switchCompanyAction(form: FormData) {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) redirect("/sign-in");
   await switchCompany(getDb(), token, str(form, "companyId"));
+  redirect("/overview");
+}
+
+export async function forgotPasswordAction(_: FormState, form: FormData): Promise<FormState> {
+  const email = str(form, "email").trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Enter a valid email address.", values: { email } };
+  await requestPasswordReset(getDb(), email);
+  await sendEmailsAfterResponse();
+  return { notice: `If ${email} has a Vantiq account, a link to reset the password is on its way. It works for an hour.`, values: { email } };
+}
+
+export async function resetPasswordAction(_: FormState, form: FormData): Promise<FormState> {
+  try {
+    const s = await resetPassword(getDb(), str(form, "token"), str(form, "password"));
+    await setSessionCookie(s.token, s.expiresAt);
+  } catch (e) {
+    if (e instanceof AuthError) return { error: e.message };
+    throw e;
+  }
+  redirect("/overview");
+}
+
+export async function acceptInviteAction(_: FormState, form: FormData): Promise<FormState> {
+  try {
+    const s = await acceptInvite(getDb(), str(form, "token"), str(form, "password"));
+    await setSessionCookie(s.token, s.expiresAt);
+  } catch (e) {
+    if (e instanceof AuthError) return { error: e.message };
+    throw e;
+  }
   redirect("/overview");
 }

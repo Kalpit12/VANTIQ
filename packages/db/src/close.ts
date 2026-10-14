@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { Db, Tx } from "./client";
 import { lockedMessage, isPeriodLocked } from "./packs";
 import { auditEvents, closeTasks, comments, memberships, users, type Role } from "./schema";
+import { nameOf, notifyMembers } from "./notify";
 import { withCompany } from "./tenant";
 
 export class CloseError extends Error {}
@@ -127,6 +128,20 @@ export async function assignCloseTask(db: Db, companyId: string, actor: Actor, p
       .set({ ownerId: who.ownerId, reviewerId: who.reviewerId, ...(reviewChanged ? { reviewedBy: null, reviewedAt: null } : {}) })
       .where(eq(closeTasks.id, t.id));
     await tx.insert(auditEvents).values({ companyId, actorId: actor.userId, action: "close.assigned", target: `${period} ${t.title}`, detail: { period, key, ownerId: who.ownerId, reviewerId: who.reviewerId } });
+    const by = await nameOf(tx, actor.userId);
+    const link = `{{origin}}/close?period=${period}#task-${key}`;
+    if (who.ownerId && who.ownerId !== t.ownerId)
+      await notifyMembers(tx, companyId, "close_assigned", [who.ownerId], {
+        except: actor.userId,
+        subject: `You own “${t.title}” for the ${periodLabel(period)} close`,
+        body: `${by} made you the owner of “${t.title}” on the ${periodLabel(period)} close checklist. Tick it off when it's done:\n${link}`,
+      });
+    if (who.reviewerId && reviewChanged)
+      await notifyMembers(tx, companyId, "close_assigned", [who.reviewerId], {
+        except: actor.userId,
+        subject: `You review “${t.title}” for the ${periodLabel(period)} close`,
+        body: `${by} made you the reviewer of “${t.title}” on the ${periodLabel(period)} close checklist. You'll get an email when it's ready for your sign-off:\n${link}`,
+      });
   });
 }
 
@@ -147,6 +162,12 @@ export async function prepareCloseTask(db: Db, companyId: string, actor: Actor, 
       .set(done ? { preparedBy: actor.userId, preparedAt: new Date() } : { preparedBy: null, preparedAt: null, reviewedBy: null, reviewedAt: null })
       .where(eq(closeTasks.id, t.id));
     await tx.insert(auditEvents).values({ companyId, actorId: actor.userId, action: done ? "close.prepared" : "close.reopened", target: `${period} ${t.title}`, detail: { period, key } });
+    if (done && t.reviewerId)
+      await notifyMembers(tx, companyId, "close_review", [t.reviewerId], {
+        except: actor.userId,
+        subject: `Ready for your sign-off: “${t.title}” (${periodLabel(period)})`,
+        body: `${await nameOf(tx, actor.userId)} ticked off “${t.title}” on the ${periodLabel(period)} close checklist. You're its reviewer, so it needs your sign-off:\n{{origin}}/close?period=${period}#task-${key}`,
+      });
   });
 }
 
@@ -228,5 +249,14 @@ export async function addComment(db: Db, companyId: string, userId: string, peri
     await assertOpen(tx, period);
     await tx.insert(comments).values({ companyId, period, anchor, body: text, authorId: userId });
     await tx.insert(auditEvents).values({ companyId, actorId: userId, action: "comment.added", target: `${periodLabel(period)} ${anchor}`, detail: { period, anchor } });
+    if (anchor.startsWith("task:")) {
+      const [t] = await tx.select().from(closeTasks).where(and(eq(closeTasks.period, period), eq(closeTasks.key, anchor.slice(5))));
+      if (t)
+        await notifyMembers(tx, companyId, "comment", [t.ownerId, t.reviewerId], {
+          except: userId,
+          subject: `New comment on “${t.title}” (${periodLabel(period)})`,
+          body: `${await nameOf(tx, userId)} commented on “${t.title}” on the ${periodLabel(period)} close checklist:\n\n“${text}”\n\n{{origin}}/close?period=${period}#task-${t.key}`,
+        });
+    }
   });
 }

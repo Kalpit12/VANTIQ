@@ -5,6 +5,14 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   AuthError,
+  acceptInvite,
+  claimQueuedEmails,
+  emails,
+  listEmails,
+  markEmail,
+  requestPasswordReset,
+  resetPassword,
+  setEmailPrefs,
   addMember,
   can,
   closeDb,
@@ -123,9 +131,10 @@ describe("auth", () => {
 
   it("adds a viewer who can read but not import", async () => {
     const a = await freshCompany("Team Co");
-    const { tempPassword } = await addMember(db, a.userId, a.companyId, { name: "Vera Viewer", email: `vera-${a.email}`, role: "viewer" });
-    expect(tempPassword).toBeTruthy();
-    const { token } = await signIn(db, `vera-${a.email}`, tempPassword!);
+    const { inviteToken } = await addMember(db, a.userId, a.companyId, { name: "Vera Viewer", email: `vera-${a.email}`, role: "viewer" });
+    // Until the invitation is accepted there is no password that works.
+    await expect(signIn(db, `vera-${a.email}`, "!invited")).rejects.toThrow(AuthError);
+    const { token } = await acceptInvite(db, inviteToken!, "vera's long password");
     const s = (await getSession(db, token))!;
     expect(s.company).toMatchObject({ id: a.companyId, role: "viewer" });
     expect(can.view(s.company!.role)).toBe(true);
@@ -254,6 +263,10 @@ describe("connected accounting system", () => {
     const aug = (await listPeriodChecks(db, a.companyId)).find((c) => c.period === "2026-08")!;
     expect(aug).toMatchObject({ status: "out_of_balance" });
     expect(aug.sourceMinor! - aug.vantiqMinor).toBe(250_000);
+    // The admin is emailed once, not again while it stays out of balance.
+    await runSync(db, a.companyId, { trigger: "scheduled", today: TODAY, connector: sandboxConnector({ reportedDrift: { "2026-08": 250_000 } }) });
+    const alerts = await listEmails(db, a.companyId);
+    expect(alerts.filter((e) => e.kind === "sync_alert").map((e) => e.subject)).toEqual(["Aug 2026 out of balance with QuickBooks Online (sandbox)"]);
     // A within-a-dollar rounding difference still counts as balanced.
     const ok = await runSync(db, a.companyId, { trigger: "manual", today: TODAY, connector: sandboxConnector({ reportedDrift: { "2026-08": 100 } }) });
     expect(ok.outOfBalance).toEqual([]);
@@ -477,8 +490,8 @@ describe("close checklist", () => {
     const admin = { userId: a.userId, role: "admin" as const };
     const add = async (name: string, role: "finance" | "viewer") => {
       const email = `${name.toLowerCase()}-${a.email}`;
-      const { tempPassword } = await addMember(db, a.userId, a.companyId, { name, email, role });
-      const s = (await getSession(db, (await signIn(db, email, tempPassword!)).token))!;
+      const { inviteToken } = await addMember(db, a.userId, a.companyId, { name, email, role });
+      const s = (await getSession(db, (await acceptInvite(db, inviteToken!, "a long enough password")).token))!;
       return { userId: s.user.id, role };
     };
     const fin = await add("Farah", "finance");
@@ -703,6 +716,91 @@ describe("inventory batches", () => {
     await loadSampleData(db, a.companyId, a.userId);
     const { summary } = expiryBuckets(await listBatches(db, a.companyId), "2026-09");
     expect(summary.writeOff).toBe(193_975_00);
+  });
+});
+
+describe("email notifications", () => {
+  const outbox = (companyId: string | null, to?: string) =>
+    db
+      .select()
+      .from(emails)
+      .where(companyId ? eq(emails.companyId, companyId) : eq(emails.to, to!))
+      .then((rows) => rows.sort((x, y) => +x.createdAt - +y.createdAt));
+
+  it("invites a new member by email; the link sets their password once", async () => {
+    const a = await freshCompany("Invite Co");
+    const email = `ivy-${a.email}`;
+    const { inviteToken } = await addMember(db, a.userId, a.companyId, { name: "Ivy", email, role: "finance" });
+    const [invite] = await outbox(a.companyId);
+    expect(invite).toMatchObject({ to: email, kind: "invite", subject: "Invite Co CFO invited you to Invite Co on Vantiq", status: "queued" });
+    expect(invite!.body).toContain(`{{origin}}/invite/${inviteToken}`);
+    const s = (await getSession(db, (await acceptInvite(db, inviteToken!, "ivy's long password")).token))!;
+    expect(s.company).toMatchObject({ id: a.companyId, role: "finance" });
+    await expect(acceptInvite(db, inviteToken!, "another long password")).rejects.toThrow(/expired or was already used/);
+    await signIn(db, email, "ivy's long password");
+
+    // Someone who already has an account is told they were added, with no new password.
+    const b = await freshCompany("Second Invite Co");
+    expect((await addMember(db, b.userId, b.companyId, { name: "Ivy", email, role: "viewer" })).inviteToken).toBeNull();
+    expect((await outbox(b.companyId)).map((e) => e.kind)).toEqual(["added"]);
+  });
+
+  it("resets a password by email and signs out everywhere else", async () => {
+    const a = await freshCompany("Reset Co");
+    await requestPasswordReset(db, "nobody-here@example.com");
+    expect(await outbox(null, "nobody-here@example.com")).toEqual([]);
+    await requestPasswordReset(db, a.email.toUpperCase());
+    const [mail] = await outbox(null, a.email);
+    expect(mail).toMatchObject({ kind: "password_reset", companyId: null });
+    const token = /reset-password\/(\S+)/.exec(mail!.body)![1]!;
+    const { token: session } = await resetPassword(db, token, "a brand new password");
+    expect(await getSession(db, a.token)).toBeNull();
+    expect(await getSession(db, session)).not.toBeNull();
+    await expect(resetPassword(db, token, "yet another password")).rejects.toThrow(AuthError);
+    await expect(signIn(db, a.email, "correct horse battery")).rejects.toThrow(AuthError);
+    await signIn(db, a.email, "a brand new password");
+  });
+
+  it("emails owners, reviewers and commenters' counterparts, respecting each person's settings", async () => {
+    const a = await freshCompany("Notify Co");
+    const admin = { userId: a.userId, role: "admin" as const };
+    const join = async (name: string) => {
+      const email = `${name.toLowerCase()}-${a.email}`;
+      const { inviteToken } = await addMember(db, a.userId, a.companyId, { name, email, role: "finance" });
+      return (await getSession(db, (await acceptInvite(db, inviteToken!, "a long enough password")).token))!.user.id;
+    };
+    const owen = await join("Owen");
+    const rita = await join("Rita");
+    await listCloseTasks(db, a.companyId, "2026-09");
+    await assignCloseTask(db, a.companyId, admin, "2026-09", "bank", { ownerId: owen, reviewerId: rita });
+    await prepareCloseTask(db, a.companyId, { userId: owen, role: "finance" }, "2026-09", "bank", true);
+    await addComment(db, a.companyId, rita, "2026-09", "task:bank", "Statement balance ties out.");
+    // Rita turns comment emails off; Owen's next comment doesn't reach her.
+    await setEmailPrefs(db, rita, a.companyId, ["comment"]);
+    await addComment(db, a.companyId, owen, "2026-09", "task:bank", "Thanks!");
+    const sent = (await outbox(a.companyId)).filter((e) => !["invite"].includes(e.kind));
+    expect(sent.map((e) => [e.kind, e.to.split("-")[0], e.subject])).toEqual([
+      ["close_assigned", "owen", "You own “Reconcile bank and investment accounts” for the Sep 2026 close"],
+      ["close_assigned", "rita", "You review “Reconcile bank and investment accounts” for the Sep 2026 close"],
+      ["close_review", "rita", "Ready for your sign-off: “Reconcile bank and investment accounts” (Sep 2026)"],
+      ["comment", "owen", "New comment on “Reconcile bank and investment accounts” (Sep 2026)"],
+    ]);
+    expect(sent[3]!.body).toContain("“Statement balance ties out.”");
+    expect(sent[3]!.body).toContain("{{origin}}/settings/notifications");
+
+    await approvePack(db, a.companyId, a.userId, "2026-09", {});
+    const approved = (await outbox(a.companyId)).filter((e) => e.kind === "pack_approved");
+    expect(approved.map((e) => e.to.split("-")[0]).sort()).toEqual(["owen", "rita"]);
+  });
+
+  it("hands each queued email to one sender only", async () => {
+    const a = await freshCompany("Outbox Co");
+    await addMember(db, a.userId, a.companyId, { name: "Q", email: `q-${a.email}`, role: "viewer" });
+    const [first, second] = await Promise.all([claimQueuedEmails(db, 1000), claimQueuedEmails(db, 1000)]);
+    const mine = [...first, ...second].filter((e) => e.companyId === a.companyId);
+    expect(mine).toHaveLength(1);
+    await markEmail(db, mine[0]!.id, { status: "logged" });
+    expect((await listEmails(db, a.companyId))[0]).toMatchObject({ status: "logged" });
   });
 });
 

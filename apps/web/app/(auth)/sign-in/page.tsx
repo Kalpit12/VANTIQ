@@ -22,7 +22,12 @@ export default async function SignInPage() {
           { name: "password", label: "Password", type: "password", autoComplete: "current-password" },
         ]}
       />
-      <p className="mt-5 text-[13px] text-ink-2">
+      <p className="mt-4 text-[13px]">
+        <Link href="/forgot-password" className="font-medium text-accent hover:underline">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="mt-3 text-[13px] text-ink-2">
         New to Vantiq?{" "}
         <Link href="/sign-up" className="font-medium text-accent hover:underline">
           Create an account

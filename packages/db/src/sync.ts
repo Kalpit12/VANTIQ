@@ -1,4 +1,4 @@
-import { periodOfDate, periodRange, type Cents, type Period } from "@vantiq/domain";
+import { periodLabel, periodOfDate, periodRange, type Cents, type Period } from "@vantiq/domain";
 import {
   ConnectorError,
   isProfitAndLoss,
@@ -18,6 +18,7 @@ import type { Db } from "./client";
 import { chunks, ensureAccounts, ensureNamed, ensurePrograms } from "./entities";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { auditEvents, cashBalances, connections, departments, periodChecks, syncRuns, transactions, vendors, type PeriodCheckStatus } from "./schema";
+import { membersWithRole, notifyMembers } from "./notify";
 import { withCompany } from "./tenant";
 
 /** Months each sync reads, ending with the current month (architecture.md 6.2). */
@@ -207,6 +208,7 @@ export async function runSync(
         from transactions where connection_id = ${conn.id} and date >= ${from} group by 1`);
       const ours = new Map(sums.map((s) => [s.period, Number(s.net)]));
       const outOfBalance: Period[] = [];
+      const before = new Map((await tx.select({ period: periodChecks.period, status: periodChecks.status }).from(periodChecks).where(eq(periodChecks.connectionId, conn.id))).map((r) => [r.period, r.status]));
       const checks = periods.map((period) => {
         const vantiq = ours.get(period) ?? 0;
         const source = sourceNet.get(period);
@@ -234,6 +236,13 @@ export async function runSync(
         target: conn.systemName,
         detail: { inserted, updated, deleted, outOfBalance },
       });
+      // Alert only on months that were fine (or unchecked) before this sync, so a known problem doesn't email every day.
+      const newlyOut = outOfBalance.filter((p) => before.get(p) !== "out_of_balance");
+      if (newlyOut.length)
+        await notifyMembers(tx, companyId, "sync_alert", await membersWithRole(tx, companyId, ["admin", "finance"]), {
+          subject: `${newlyOut.map((p) => periodLabel(p)).join(", ")} out of balance with ${conn.systemName}`,
+          body: `After the latest sync, net income in Vantiq no longer matches ${conn.systemName} for ${newlyOut.map((p) => periodLabel(p)).join(", ")}. Months out of balance can't be approved until they match. See the differences:\n{{origin}}/connections`,
+        });
       return { inserted, updated, deleted, outOfBalance };
     });
     return { status: "done", runId, ...result };

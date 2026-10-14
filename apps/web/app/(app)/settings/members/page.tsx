@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { setRoleAction } from "@/app/actions/data";
 import { AddMemberForm } from "@/components/AddMemberForm";
 import { SettingsTabs } from "@/components/SettingsTabs";
-import { Card, PageHeader } from "@/components/ui";
+import { Card, PageHeader, StatusPill } from "@/components/ui";
 import { getWorkspace } from "@/lib/data";
 import { one, type SearchParams } from "@/lib/view";
 
@@ -45,7 +45,10 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
               {members.map((m) => (
                 <tr key={m.id} className="border-b border-line/70">
                   <td className="px-5 py-2">
-                    <div className="text-ink">{m.name}</div>
+                    <div className="flex items-center gap-2 text-ink">
+                      {m.name}
+                      {m.pending && <StatusPill tone="neutral">Invitation pending</StatusPill>}
+                    </div>
                     <div className="text-[12px] text-ink-3">{m.email}</div>
                   </td>
                   <td className="py-2 pr-4">
