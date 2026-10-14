@@ -71,6 +71,13 @@
       "when": 1791981389576,
       "tag": "0009_inventory_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791982847595,
+      "tag": "0010_email_notifications",
+      "breakpoints": true
     }
   ]
 }

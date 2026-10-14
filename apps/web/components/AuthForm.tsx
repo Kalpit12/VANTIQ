@@ -16,14 +16,19 @@ export function AuthForm({
   action,
   fields,
   submit,
+  hidden,
 }: {
   action: (state: FormState, form: FormData) => Promise<FormState>;
   fields: Field[];
   submit: string;
+  hidden?: Record<string, string>;
 }) {
   const [state, formAction] = useActionState(action, {});
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {Object.entries(hidden ?? {}).map(([k, v]) => (
+        <input key={k} type="hidden" name={k} value={v} />
+      ))}
       {fields.map((f) => (
         <div key={f.name} className="flex flex-col gap-1">
           <label htmlFor={f.name} className="text-[13px] font-medium text-ink">
@@ -44,6 +49,11 @@ export function AuthForm({
       {state.error && (
         <p role="alert" className="rounded-md bg-bad/10 px-3 py-2 text-[13px] text-bad">
           {state.error}
+        </p>
+      )}
+      {state.notice && (
+        <p role="status" className="rounded-md bg-good/10 px-3 py-2 text-[13px] text-ink">
+          {state.notice}
         </p>
       )}
       <SubmitButton label={submit} />

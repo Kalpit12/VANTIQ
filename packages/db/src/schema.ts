@@ -43,6 +43,8 @@ export const memberships = pgTable(
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     companyId: companyId(),
     role: text("role").$type<Role>().notNull(),
+    /** Email notification kinds this member has turned off for this company. */
+    emailOff: text("email_off").array().notNull().default(sql`'{}'::text[]`),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.companyId] })],
@@ -526,6 +528,49 @@ export const inventoryBatches = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("inventory_batches_lot_idx").on(t.companyId, t.product, t.lot)],
+);
+
+/**
+ * One-time links sent by email: an invitation to set a password and join a
+ * company, or a password reset. Only a hash of the token is stored. Outside
+ * row-level security, like `sessions`, because the person opening the link
+ * is not signed in.
+ */
+export const emailTokens = pgTable("email_tokens", {
+  id: text("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  purpose: text("purpose").$type<"invite" | "reset">().notNull(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/**
+ * Every email Vantiq sends, written in the same transaction as the change
+ * that caused it and delivered afterwards (an outbox), so a failed send never
+ * loses or undoes the change. Bodies hold `{{origin}}` where the app's address
+ * goes. Outside row-level security because password resets belong to no
+ * company; it is only read through the notifications module, which filters
+ * by company.
+ */
+export const emails = pgTable(
+  "emails",
+  {
+    id: id(),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    to: text("to").notNull(),
+    kind: text("kind").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    status: text("status").$type<"queued" | "sending" | "sent" | "logged" | "failed">().notNull().default("queued"),
+    error: text("error"),
+    providerId: text("provider_id"),
+    createdAt: createdAt(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [index("emails_status_idx").on(t.status, t.createdAt), index("emails_company_idx").on(t.companyId, t.createdAt)],
 );
 
 /** Tables guarded by row-level security. Kept here so tests can check every one. */

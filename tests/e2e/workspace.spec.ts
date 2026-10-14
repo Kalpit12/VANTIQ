@@ -93,13 +93,12 @@ test("companies are isolated and viewers cannot import", async ({ page, browser 
   await page.getByLabel("Work email").fill(viewerEmail);
   await page.getByLabel("Role", { exact: true }).selectOption("viewer");
   await page.getByRole("button", { name: "Add member" }).click();
-  const temp = (await page.locator("code").textContent())!.trim();
+  const invite = (await page.locator("code").textContent())!.trim();
 
   const viewer = await (await browser.newContext()).newPage();
-  await viewer.goto("/sign-in");
-  await viewer.getByLabel("Work email").fill(viewerEmail);
-  await viewer.getByLabel("Password").fill(temp);
-  await viewer.getByRole("button", { name: "Sign in" }).click();
+  await viewer.goto(invite);
+  await viewer.getByLabel("Password").fill("viewer's long password");
+  await viewer.getByRole("button", { name: "Join" }).click();
   await expect(viewer.getByText("$59.6M", { exact: true })).toBeVisible();
   await expect(viewer.getByRole("link", { name: "Members" })).toHaveCount(0);
   await viewer.goto("/import");
@@ -351,7 +350,7 @@ test("close checklist: owner and reviewer, sign-off, comments on tasks and lines
   await page.getByLabel("Work email").fill(finEmail);
   await page.getByLabel("Role", { exact: true }).selectOption("finance");
   await page.getByRole("button", { name: "Add member" }).click();
-  const temp = (await page.locator("code").textContent())!.trim();
+  const invite = (await page.locator("code").textContent())!.trim();
 
   // The CFO makes Fin the owner of the bank reconciliation and reviews it.
   await page.goto("/close?period=2026-09");
@@ -371,10 +370,10 @@ test("close checklist: owner and reviewer, sign-off, comments on tasks and lines
 
   // Fin sees it under My tasks and ticks it off.
   const fin = await (await browser.newContext()).newPage();
-  await fin.goto("/sign-in");
-  await fin.getByLabel("Work email").fill(finEmail);
-  await fin.getByLabel("Password").fill(temp);
-  await fin.getByRole("button", { name: "Sign in" }).click();
+  await fin.goto(invite);
+  await expect(fin.getByRole("heading", { name: "Join Close Bio" })).toBeVisible();
+  await fin.getByLabel("Password").fill("fin's long password");
+  await fin.getByRole("button", { name: "Join" }).click();
   await expect(fin.getByRole("heading", { name: "Overview" })).toBeVisible();
   await fin.goto("/close?period=2026-09&mine=1");
   await expect(fin.locator("li[id^=task-]")).toHaveCount(1);
@@ -469,4 +468,58 @@ test("inventory: write off an expired lot, change a quantity, import a listing, 
   await expect(page.getByText("Removed HX-204 drug product 50 mg DP-2311")).toBeVisible();
   await expect(page.getByText("Changed Reference standard HX-101 RS-118: quantity 25 to 10")).toBeVisible();
   await expect(page.getByText("Imported inventory: 1 lot added, 0 updated, 1 row skipped")).toBeVisible();
+});
+
+test("notifications: forgot password by email, invitation and close emails, and choosing what to get", async ({ page, browser }) => {
+  const email = await signUp(page, "Mail Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  // Invite someone and make them the owner of a close task.
+  const nia = `nia-${Date.now()}@example.com`;
+  await page.goto("/settings/members");
+  await page.getByLabel("Name").fill("Nia Finance");
+  await page.getByLabel("Work email").fill(nia);
+  await page.getByLabel("Role", { exact: true }).selectOption("finance");
+  await page.getByRole("button", { name: "Add member" }).click();
+  await expect(page.getByText("Email isn't set up yet, so send them this invitation link yourself")).toBeVisible();
+  await expect(page.getByText("Invitation pending")).toBeVisible();
+  const invite = (await page.locator("code").textContent())!.trim();
+  const other = await (await browser.newContext()).newPage();
+  await other.goto(invite);
+  await other.getByLabel("Password").fill("nia's long password");
+  await other.getByRole("button", { name: "Join" }).click();
+  await expect(other.getByRole("heading", { name: "Overview" })).toBeVisible();
+  // The link works once.
+  await other.goto(invite);
+  await expect(other.getByRole("heading", { name: "This invitation has expired" })).toBeVisible();
+
+  await page.goto("/close?period=2026-09");
+  const bank = page.locator("#task-bank");
+  await bank.getByText("Assign").click();
+  await bank.getByLabel("Owner").selectOption({ label: "Nia Finance" });
+  await bank.getByRole("button", { name: "Save" }).click();
+  await expect(bank).toContainText("Owner: Nia Finance");
+
+  // Nia turns off approval emails.
+  await other.goto("/settings/notifications");
+  await other.getByLabel(/A month is approved/).uncheck();
+  await other.getByRole("button", { name: "Save" }).click();
+  await expect(other.getByText("Saved.")).toBeVisible();
+  await expect(other.getByLabel(/A month is approved/)).not.toBeChecked();
+  await expect(other.getByRole("heading", { name: "Recent emails" })).toHaveCount(0);
+
+  // The admin sees what went out (logged, since no email provider is set up here).
+  await page.goto("/settings/notifications");
+  await expect(page.getByText("Casey CFO invited you to Mail Bio on Vantiq")).toBeVisible();
+  await expect(page.getByText("You own “Reconcile bank and investment accounts” for the Sep 2026 close")).toBeVisible();
+  await expect(page.getByText("Not sent: email not set up").first()).toBeVisible();
+
+  // Forgot password: the reset link comes by email.
+  const guest = await (await browser.newContext()).newPage();
+  await guest.goto("/sign-in");
+  await guest.getByRole("link", { name: "Forgot your password?" }).click();
+  await guest.getByLabel("Work email").fill(email);
+  await guest.getByRole("button", { name: "Send reset link" }).click();
+  await expect(guest.getByText(`If ${email} has a Vantiq account, a link to reset the password is on its way.`)).toBeVisible();
 });

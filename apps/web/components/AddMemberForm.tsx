@@ -36,15 +36,15 @@ export function AddMemberForm() {
       )}
       {state.added && (
         <div role="status" className="rounded-md bg-good/10 px-3 py-2 text-[13px] text-ink">
-          Added {state.added}.
-          {state.tempPassword ? (
+          {!state.invited ? (
+            <>Added {state.added}. They already use Vantiq, so we emailed to let them know.</>
+          ) : state.inviteLink ? (
             <>
-              {" "}
-              Send them this temporary password. It is shown only once:
-              <code className="mt-1 block select-all rounded bg-surface px-2 py-1 font-mono text-[13px]">{state.tempPassword}</code>
+              Added {state.added}. Email isn&apos;t set up yet, so send them this invitation link yourself. It works once, for 7 days:
+              <code className="mt-1 block select-all break-all rounded bg-surface px-2 py-1 font-mono text-[12px]">{state.inviteLink}</code>
             </>
           ) : (
-            " They already had a Vantiq account and can sign in now."
+            <>Invitation sent to {state.added}. The link in it works for 7 days.</>
           )}
         </div>
       )}

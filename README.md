@@ -71,7 +71,17 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C16 (close calendar); the pack can't be approved until the checklist is done | Done |
 | 9. Board pack sharing | Board pack (board-ready subset of the approved review pack) as a page and PDF, read-only links for the board that expire, revoke, open counts, audit | Done |
 | 10. Grants and income | Schedules for grants, partner milestones and licensing with expected receipts and likelihood, matched to income in the books; received, overdue, risk-weighted next 12 months, grant left to draw; chart C15 (receipts timeline) | Done |
+| 12. Email notifications | Email invitations (replacing temporary passwords) and password reset; emails when you're assigned a close task, a task you review is ready to sign off, someone comments on your task, a month is approved, or a synced month goes out of balance; each person chooses which they get; admins see every email sent | Done |
 | 11. Inventory and expiry | Lots with product, quantity, unit cost and expiry, entered or imported; grouped by expiry (expired, 0–3, 3–6, 6–12 months, later); suggested write-off per lot with the reason; month-end reserve journal entry CSV; chart C14 (expiry exposure by product) | Done |
+
+### Milestone 12 decisions
+
+- **Resend** sends the email (one HTTPS call, no SDK). Set `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in Resend), and `APP_URL` for the links. Without a key nothing is sent: emails are kept as "Not sent" under Settings → Notifications, and adding a member shows the invitation link for the admin to pass on.
+- **An outbox, not a send in the request.** Each email is written in the same database transaction as the change that caused it, then delivered after the response (and by the scheduled sync), so a slow or failed send never blocks or undoes the change. Each queued email is claimed by one sender only, and Resend gets an idempotency key.
+- **Invitations replace temporary passwords.** Someone new gets a link to set their own password, valid once for 7 days; members show "Invitation pending" until they do, and get no other email until then. Someone who already uses Vantiq is told they were added.
+- **Password reset** links work once, for an hour, and signing in with the new password signs the person out everywhere else. The form says the same thing whether or not the email has an account.
+- **What emails go out:** an owner or reviewer is assigned to a close task; a task you review is ticked off; someone comments on a close task you own or review; a month is approved (to everyone but the approver); a synced month goes out of balance (to admins and finance, once per month going out, not on every sync). Nobody is emailed about their own action. Each person turns these on or off per company.
+- One-time link tokens are stored only as SHA-256 hashes. `email_tokens` and `emails` sit outside row-level security like `sessions` (a reset belongs to no company) and are read only through the notifications module.
 
 ### Milestone 11 decisions
 
@@ -144,7 +154,7 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 
 ### Milestone 2 decisions
 
-- **Sign-in** is email and password with server-side sessions (scrypt hashes, random tokens stored only as SHA-256, httpOnly cookies) instead of Auth.js. It has no extra service to configure. Google and Microsoft sign-in, email invites and password reset arrive with the notifications work; until then an admin adds people with a one-time temporary password.
+- **Sign-in** is email and password with server-side sessions (scrypt hashes, random tokens stored only as SHA-256, httpOnly cookies) instead of Auth.js. It has no extra service to configure. Google and Microsoft sign-in come later. Since milestone 12 an admin invites people by email and anyone can reset a forgotten password by email.
 - **Tenant isolation** uses Postgres row-level security, forced on every tenant table, plus application checks. Tests try cross-company reads and writes on every tenant table.
 - **Mapping suggestions** are keyword and account-range rules for now; Claude-drafted suggestions come with milestone 5. Suggested mappings count in the numbers right away and are flagged until someone confirms them.
 - **Budgets** are imported by account (and optionally program) and replace the months a file covers. Ledger imports are deduplicated by row content, so re-uploading a file is safe.

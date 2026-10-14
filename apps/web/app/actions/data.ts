@@ -20,6 +20,7 @@ import {
   type Role,
 } from "@vantiq/db";
 import { parseUpload, type ColumnMap } from "@vantiq/integrations";
+import { appOrigin, emailConfigured } from "@/lib/email";
 import { requireMember } from "@/lib/data";
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -98,7 +99,10 @@ export async function confirmAllAction() {
 export interface AddMemberState {
   error?: string;
   added?: string;
-  tempPassword?: string | null;
+  /** New to Vantiq, so they were invited to set a password. */
+  invited?: boolean;
+  /** The invitation link, shown to the admin only while email isn't set up. */
+  inviteLink?: string | null;
 }
 
 export async function addMemberAction(_: AddMemberState, form: FormData): Promise<AddMemberState> {
@@ -107,9 +111,9 @@ export async function addMemberAction(_: AddMemberState, form: FormData): Promis
     const role = String(form.get("role")) as Role;
     if (!ROLES.includes(role)) return { error: "Choose a role." };
     const email = String(form.get("email") ?? "");
-    const { tempPassword } = await addMember(db, userId, companyId, { name: String(form.get("name") ?? ""), email, role });
+    const { inviteToken } = await addMember(db, userId, companyId, { name: String(form.get("name") ?? ""), email, role });
     revalidatePath("/settings/members");
-    return { added: email, tempPassword };
+    return { added: email, invited: !!inviteToken, inviteLink: inviteToken && !emailConfigured() ? `${await appOrigin()}/invite/${inviteToken}` : null };
   } catch (e) {
     return { error: e instanceof AuthError || e instanceof Error ? e.message : "Something went wrong." };
   }

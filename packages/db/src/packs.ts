@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db, Tx } from "./client";
 import { auditEvents, reviewPacks, users, type PackStatus } from "./schema";
+import { membersWithRole, nameOf, notifyMembers } from "./notify";
 import { withCompany } from "./tenant";
 
 export class PackError extends Error {}
@@ -68,6 +69,11 @@ export async function approvePack(db: Db, companyId: string, userId: string, per
       .values({ companyId, period, ...values })
       .onConflictDoUpdate({ target: [reviewPacks.companyId, reviewPacks.period], set: values });
     await tx.insert(auditEvents).values({ companyId, actorId: userId, action: "pack.approved", target: period });
+    await notifyMembers(tx, companyId, "pack_approved", await membersWithRole(tx, companyId, ["admin", "finance", "viewer"]), {
+      except: userId,
+      subject: `${periodLabel(period)} is approved`,
+      body: `${await nameOf(tx, userId)} approved the ${periodLabel(period)} review pack. Its numbers are now locked. Read the pack:\n{{origin}}/pack?period=${period}`,
+    });
   });
 }
 
