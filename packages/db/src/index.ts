@@ -11,3 +11,5 @@ export * from "./connections";
 export * from "./sync";
 export { encryptSecret, decryptSecret } from "./secrets";
 export * from "./explanations";
+export * from "./packs";
+export * from "./audit";

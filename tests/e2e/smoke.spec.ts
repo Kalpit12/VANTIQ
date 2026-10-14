@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const pages = [
@@ -5,6 +6,7 @@ const pages = [
   { path: "/variances", heading: "Variances" },
   { path: "/programs", heading: "R&D programs" },
   { path: "/statements", heading: "Statements" },
+  { path: "/pack", heading: "Review pack" },
 ];
 
 for (const p of pages) {
@@ -80,4 +82,23 @@ test("the demo explains each material variance and cites its transactions", asyn
   expect(await chips.count()).toBeGreaterThan(0);
   // Every cited transaction is one of the rows behind the number, marked as cited.
   expect(await drawer.getByText("Cited", { exact: true }).count()).toBe(await chips.count());
+});
+
+for (const p of pages) {
+  test(`${p.heading} passes axe accessibility checks`, async ({ page }) => {
+    await page.goto(p.path);
+    await expect(page.getByRole("heading", { level: 1, name: p.heading })).toBeVisible();
+    const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+    expect(violations.map((v) => `${v.id}: ${v.nodes.length} × ${v.nodes[0]?.target.join(" ")}`)).toEqual([]);
+  });
+}
+
+test("the review pack downloads as a PDF", async ({ page }) => {
+  await page.goto("/pack?period=2026-09");
+  await expect(page.getByText("Sign up and load the sample data to approve packs.", { exact: false })).toBeVisible();
+  const res = await page.request.get("/pack/pdf?period=2026-09");
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toBe("application/pdf");
+  expect(res.headers()["content-disposition"]).toContain("Helixa-Therapeutics-review-pack-2026-09.pdf");
+  expect((await res.body()).subarray(0, 5).toString()).toBe("%PDF-");
 });

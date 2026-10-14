@@ -22,6 +22,7 @@ import { href, one, resolveView, type SearchParams } from "@/lib/view";
 import { ExplanationBlock } from "@/components/ExplanationBlock";
 import { ExplanationPill } from "@/components/ExplanationCell";
 import { explanationsFor } from "@/lib/explanations";
+import { monthLocked } from "@/lib/pack";
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -42,6 +43,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const material = materialLines(ledger, view);
   const attention = material.slice(0, 5);
   const expl = await explanationsFor(ws, view.periods);
+  const locked = await monthLocked(ws, view.periods);
   const dc = one(sp, "dc");
   const dcExplain = dc && (expl.has(dc) || material.some((m) => m.categoryId === dc)) ? dc : null;
   const back = href("/overview", sp, { xerr: null });
@@ -220,7 +222,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               categoryId={dcExplain}
               view={view}
               back={back}
-              canEdit={ws.mode === "db" && can.explain(ws.role)}
+              canEdit={ws.mode === "db" && can.explain(ws.role) && !locked}
               demo={ws.mode === "demo"}
               error={one(sp, "xerr")}
             />

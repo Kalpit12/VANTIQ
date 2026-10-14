@@ -105,6 +105,9 @@ export const can = {
   importData: (r: Role) => r === "admin" || r === "finance",
   editMappings: (r: Role) => r === "admin" || r === "finance",
   explain: (r: Role) => r === "admin" || r === "finance",
+  approvePack: (r: Role) => r === "admin" || r === "finance",
+  reopenPack: (r: Role) => r === "admin",
+  viewAudit: (r: Role) => r === "admin" || r === "finance",
   manageMembers: (r: Role) => r === "admin",
 };
 

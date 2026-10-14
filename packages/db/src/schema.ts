@@ -316,6 +316,31 @@ export const explanations = pgTable(
   (t) => [uniqueIndex("explanations_line_idx").on(t.companyId, t.scope, t.categoryId)],
 );
 
+export const PACK_STATUS = ["approved", "reopened"] as const;
+export type PackStatus = (typeof PACK_STATUS)[number];
+
+/**
+ * A month's review pack once someone approves it. Approval snapshots the
+ * pack's numbers and explanations into `snapshot`, which locks the month:
+ * the pack shows the snapshot, and later changes to the books are flagged
+ * rather than silently changing what was approved. Reopening unlocks it.
+ */
+export const reviewPacks = pgTable(
+  "review_packs",
+  {
+    id: id(),
+    companyId: companyId(),
+    period: char("period", { length: 7 }).notNull(),
+    status: text("status").$type<PackStatus>().notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+    reopenedBy: uuid("reopened_by").references(() => users.id, { onDelete: "set null" }),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("review_packs_period_idx").on(t.companyId, t.period)],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -332,4 +357,5 @@ export const TENANT_TABLES = [
   "sync_runs",
   "period_checks",
   "explanations",
+  "review_packs",
 ] as const;

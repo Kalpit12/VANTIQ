@@ -61,7 +61,17 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 3. Landing page | Public page at `/` with an animated hero, live product mockup, features, how it works, security and sign-up calls to action; the app overview moves to `/overview` | Done |
 | 4. Accounting connections | Connect QuickBooks Online, Xero, NetSuite or Sage Intacct through Merge; 24-month first sync, then incremental and scheduled syncs; month-end net income check with out-of-balance alerts; sandbox connection to try it | Done |
 | 5. AI explanations | Drafted explanation for every material variance, citing its transactions (Claude when a key is set, built-in rules otherwise); accept, edit, reject on Overview and Variances | Done |
-| 6. Review pack | Pack page, PDF export, audit log, settings; Phase 1 test gate | Next |
+| 6. Review pack | Monthly pack page and PDF; approval checks and month locking; audit log with CSV export; company settings; Phase 1 end-to-end and accessibility tests | Done |
+
+### Milestone 6 decisions
+
+- **One pack per month.** The pack shows the month's headline numbers, a summary, every material variance with its explanation and cited transactions, budget vs actual for the month and year to date, R&D by program, and cash and runway. The page and the PDF render from the same data, so they always agree.
+- **PDF without a browser.** The PDF is drawn with `@react-pdf/renderer` on the server instead of printing the page with Playwright, because a headless browser doesn't fit in a Vercel function. It uses the built-in Helvetica font.
+- **Approval checks.** Finance or Admin can approve a month only when the books agree with the connected system, every account is mapped, and every material line has an accepted or edited explanation. The page lists what's missing with a link to fix it.
+- **Locking.** Approving stores a snapshot of the pack and locks the month: its explanations become read-only and the pack keeps showing what was approved. If the books change afterwards, the pack flags a "Post-close change" with the lines that moved. Only an Admin can reopen a month, and must give a reason.
+- **Audit log.** Approvals, reopenings, PDF downloads, explanation decisions, imports, mapping changes, connections, syncs, members and company renames are all recorded. Admin and Finance can browse it by area and export it as CSV; nobody can edit or delete an entry.
+- **Phase 1 test gate.** One Playwright test walks sign-up, sample data, mapping, drill-down, explanations, approval, PDF download, the audit log and reopening. axe checks (WCAG 2 A and AA) pass on Overview, Variances, R&D programs, Statements and the review pack; fixing them darkened the muted text colour slightly.
+- Materiality stays fixed at ±10% and ±$25k for now; making it a company setting is a Phase 2 item.
 
 ### Milestone 5 decisions
 

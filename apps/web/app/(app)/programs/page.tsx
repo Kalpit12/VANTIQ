@@ -66,7 +66,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
               key={p.id}
               href={href("/programs", sp, { program: active ? null : p.id, dc: null, dp: null, dper: null })}
               scroll={false}
-              aria-pressed={active}
+              aria-current={active ? "true" : undefined}
               className={`rounded-[10px] border bg-surface p-4 transition-colors ${active ? "border-accent ring-1 ring-accent" : "border-line hover:border-line-strong"}`}
             >
               <div className="flex items-center justify-between">

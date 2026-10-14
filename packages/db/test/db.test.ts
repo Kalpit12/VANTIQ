@@ -39,6 +39,13 @@ import {
   TENANT_TABLES,
   transactions,
   withCompany,
+  approvePack,
+  getPack,
+  listAuditEvents,
+  listPacks,
+  recordPackExport,
+  renameCompany,
+  reopenPack,
   type Db,
 } from "../src";
 
@@ -323,6 +330,53 @@ describe("variance explanations", () => {
     await expect(decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cro", { action: "edit", text: " " })).rejects.toThrow(/1,200/);
     const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events order by at`));
     expect(audit.map((r) => r.action)).toEqual(expect.arrayContaining(["explanation.draft", "explanation.edit", "explanation.reject"]));
+  });
+});
+
+describe("review packs and audit log", () => {
+  it("approving locks the month's explanations until someone reopens it", async () => {
+    const a = await freshCompany("Pack Co");
+    const d = { categoryId: "rd-cro", text: "Draft.", citedTransactionIds: [], source: "rules" as const, confidence: "medium" as const, promptVersion: "test/1", deltaMinor: 1 };
+    await saveDrafts(db, a.companyId, a.userId, ["2026-09"], [d]);
+    expect(await getPack(db, a.companyId, "2026-09")).toBeNull();
+
+    await approvePack(db, a.companyId, a.userId, "2026-09", { total: 123 });
+    const pack = await getPack<{ total: number }>(db, a.companyId, "2026-09");
+    expect(pack).toMatchObject({ status: "approved", snapshot: { total: 123 }, approvedByName: "Pack Co CFO" });
+    await expect(approvePack(db, a.companyId, a.userId, "2026-09", {})).rejects.toThrow(/already approved/);
+    await expect(decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cro", { action: "accept" })).rejects.toThrow(/locked/);
+    await expect(saveDrafts(db, a.companyId, a.userId, ["2026-09"], [d])).rejects.toThrow(/locked/);
+    // Other months and year-to-date views stay open.
+    expect(await saveDrafts(db, a.companyId, a.userId, ["2026-08"], [d])).toBe(1);
+    expect(await saveDrafts(db, a.companyId, a.userId, ["2026-01", "2026-09"], [d])).toBe(1);
+
+    await expect(reopenPack(db, a.companyId, a.userId, "2026-09", "  ")).rejects.toThrow(/why/);
+    await reopenPack(db, a.companyId, a.userId, "2026-09", "Late CRO invoice");
+    expect(await getPack(db, a.companyId, "2026-09")).toMatchObject({ status: "reopened", reopenedByName: "Pack Co CFO" });
+    await decideExplanation(db, a.companyId, a.userId, ["2026-09"], "rd-cro", { action: "accept" });
+    await expect(reopenPack(db, a.companyId, a.userId, "2026-09", "again")).rejects.toThrow(/not approved/);
+    await approvePack(db, a.companyId, a.userId, "2026-09", { total: 456 });
+    expect((await listPacks(db, a.companyId)).map((p) => [p.period, p.status])).toEqual([["2026-09", "approved"]]);
+
+    // Another company sees none of it.
+    const b = await freshCompany("Other Pack Co");
+    expect(await getPack(db, b.companyId, "2026-09")).toBeNull();
+    expect(await listAuditEvents(db, b.companyId, { area: "pack" })).toHaveLength(0);
+  });
+
+  it("lists the audit log newest first, by area and page", async () => {
+    const a = await freshCompany("Audit Co");
+    await approvePack(db, a.companyId, a.userId, "2026-08", {});
+    await recordPackExport(db, a.companyId, a.userId, "2026-08", "pdf");
+    await renameCompany(db, a.companyId, a.userId, "  Audit Co Inc  ");
+    await renameCompany(db, a.companyId, a.userId, "Audit Co Inc"); // no change, no event
+    await expect(renameCompany(db, a.companyId, a.userId, " ")).rejects.toThrow(/company name/);
+    const all = await listAuditEvents(db, a.companyId);
+    expect(all.map((e) => e.action)).toEqual(["company.renamed", "pack.exported", "pack.approved"]);
+    expect(all[0]).toMatchObject({ target: "Audit Co Inc", detail: { from: "Audit Co" }, actorName: "Audit Co CFO" });
+    expect((await listAuditEvents(db, a.companyId, { area: "pack" })).map((e) => e.action)).toEqual(["pack.exported", "pack.approved"]);
+    expect((await listAuditEvents(db, a.companyId, { before: all[1]!.at })).map((e) => e.action)).toEqual(["pack.approved"]);
+    expect((await getSession(db, a.token))?.company?.name).toBe("Audit Co Inc");
   });
 });
 

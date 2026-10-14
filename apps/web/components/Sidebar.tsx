@@ -11,6 +11,7 @@ const NAV = [
   { href: "/variances", label: "Variances", icon: "M4 19h16M7 15V9m5 6V5m5 10v-3" },
   { href: "/programs", label: "R&D programs", icon: "M9 3h6M10 3v6L5 18a2 2 0 002 3h10a2 2 0 002-3l-5-9V3" },
   { href: "/statements", label: "Statements", icon: "M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4" },
+  { href: "/pack", label: "Review pack", icon: "M9 12l2 2 4-4M7 3h10a2 2 0 012 2v16l-7-3-7 3V5a2 2 0 012-2z" },
 ];
 
 const DATA_NAV = [
@@ -68,15 +69,14 @@ export function Sidebar({
               badge={item.href === "/mappings" && needsMapping > 0 ? needsMapping : undefined}
             />
           ))}
-          {role === "admin" && (
-            <NavLink href="/settings/members" label="Members" icon="M16 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M9 10a3 3 0 100-6 3 3 0 000 6zM22 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8" active={isActive("/settings")} />
-          )}
+          <NavLink
+            href="/settings"
+            label="Settings"
+            icon="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"
+            active={isActive("/settings")}
+          />
         </nav>
       )}
-      <div className="mt-6 border-t border-line pt-4">
-        <p className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-ink-3">Coming next</p>
-        <span className="block px-2.5 py-1.5 text-[13px] text-ink-3">Review pack</span>
-      </div>
       {user && (
         <div className="mt-auto border-t border-line px-1 pt-3">
           <p className="truncate px-1.5 text-[13px] font-medium text-ink">{user.name}</p>
