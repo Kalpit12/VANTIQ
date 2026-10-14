@@ -69,7 +69,15 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | --- | --- | --- |
 | 7. Trial accruals | Trials with CRO contracts priced by driver (monthly fee, sites, patients, visits), change orders, monthly CRO activity (entered or imported), accrual worked out step by step, month-end journal entry CSV; charts C11 (contract vs work done vs billed), C12 (trial timeline), C13 (accrual by CRO) | Done |
 | 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C15 (close calendar); the pack can't be approved until the checklist is done | Done |
-| 9. Board pack sharing | Board pack export and expiring share links | Next |
+| 9. Board pack sharing | Board pack (board-ready subset of the approved review pack) as a page and PDF, read-only links for the board that expire, revoke, open counts, audit | Done |
+
+### Milestone 9 decisions
+
+- **The board pack** is the approved review pack without the working detail: headline numbers, what moved and why, the top two levels of the income statement, R&D by program, cash and runway. No cited transactions and no internal comments.
+- **Only approved months can be shared**, and a link always shows the snapshot that was approved. Reopening the month withdraws every link to it; approving again needs a new link, so the board never sees numbers that changed under them.
+- **Links** last 7, 14, 30 or 90 days, carry an optional note to the board, and can be revoked at any time. Only a SHA-256 hash of the token is stored, so a link is shown once when it is created. Every open and PDF download is counted and written to the audit log.
+- **The shared page** needs no sign-in, has no way into the app, and is served with `no-store`, `noindex` and `no-referrer` headers.
+- `share_links` sits outside row-level security, like `sessions`, because a visitor arrives with a token and no company. It is only read through the shares module, which filters by company everywhere else.
 
 ### Milestone 8 decisions
 

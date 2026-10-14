@@ -8,6 +8,7 @@ const pages = [
   { path: "/statements", heading: "Statements" },
   { path: "/pack", heading: "Review pack" },
   { path: "/close", heading: "Close checklist" },
+  { path: "/pack/board", heading: "Helixa Therapeutics" },
   { path: "/trials", heading: "Trial accruals" },
   { path: "/trials/hx-204-101", heading: "HX-204-101" },
 ];
@@ -118,6 +119,21 @@ test("the demo close checklist shows Helixa's September close part way through",
   await page.goto("/pack?period=2026-09");
   await expect(page.getByText(/close tasks are still open or waiting for sign-off/)).toBeVisible();
   await expect(page.getByText("Confirmed with Meridian: October invoice will catch up on CO4 visits.")).toBeVisible();
+});
+
+test("the demo previews the board pack and its PDF, but has no share links", async ({ page }) => {
+  await page.goto("/pack?period=2026-09");
+  await expect(page.getByText("Sign up and approve a month to send the board a link that expires.")).toBeVisible();
+  await page.getByRole("link", { name: "Preview" }).click();
+  await expect(page.getByText("Board pack · Sep 2026")).toBeVisible();
+  await expect(page.getByText("What moved, and why")).toBeVisible();
+  // No transaction detail or internal comments.
+  await expect(page.getByText("Confirmed with Meridian")).toHaveCount(0);
+  const pdf = await page.request.get("/pack/board/pdf?period=2026-09");
+  expect(pdf.headers()["content-disposition"]).toContain("Helixa-Therapeutics-board-pack-2026-09.pdf");
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  await page.goto("/share/abcdefghijklmnopqrstuvwxyz012345");
+  await expect(page.getByRole("heading", { name: "This link doesn't work" })).toBeVisible();
 });
 
 test("trial accruals show the work done against billing, step by step, and export journal entries", async ({ page }) => {

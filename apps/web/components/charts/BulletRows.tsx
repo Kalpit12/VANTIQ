@@ -6,7 +6,8 @@ export interface BulletRow {
   label: string;
   sublabel?: string;
   variance: Variance;
-  href: string;
+  /** Drill-down link; rows are plain when there is none (the shared board pack). */
+  href?: string;
 }
 
 /**
@@ -16,6 +17,20 @@ export interface BulletRow {
  * drawn in the unfavorable color, unspent budget as a dashed outline, and a
  * thin marker shows where budget sits. Every row links to its drill-down.
  */
+function Row({ href, className, label, children }: { href?: string; className: string; label: string; children: React.ReactNode }) {
+  if (!href)
+    return (
+      <div className={className} role="group" aria-label={label}>
+        {children}
+      </div>
+    );
+  return (
+    <Link href={href} scroll={false} className={className} aria-label={label}>
+      {children}
+    </Link>
+  );
+}
+
 export function BulletRows({ rows }: { rows: BulletRow[] }) {
   const max = Math.max(1, ...rows.flatMap((r) => [r.variance.actual, r.variance.comparison])) * 1.04;
   const pct = (v: number) => `${(Math.max(0, v) / max) * 100}%`;
@@ -29,11 +44,10 @@ export function BulletRows({ rows }: { rows: BulletRow[] }) {
           const under = comparison > 0 && actual < comparison;
           return (
             <li key={r.id} className="border-b border-line/70 last:border-b-0">
-              <Link
+              <Row
                 href={r.href}
-                scroll={false}
-                className="-mx-2 block rounded-md px-2 py-2.5 transition-colors hover:bg-subtle"
-                aria-label={`${r.label}: actual ${formatCompactCurrency(actual)}, budget ${formatCompactCurrency(comparison)}, ${formatSignedPct(deltaPct)}`}
+                className={`-mx-2 block rounded-md px-2 py-2.5 ${r.href ? "transition-colors hover:bg-subtle" : ""}`}
+                label={`${r.label}: actual ${formatCompactCurrency(actual)}, budget ${formatCompactCurrency(comparison)}, ${formatSignedPct(deltaPct)}`}
               >
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate">
@@ -66,7 +80,7 @@ export function BulletRows({ rows }: { rows: BulletRow[] }) {
                     <span className="absolute -top-1 h-4 w-[2px] rounded-full bg-ink-2" style={{ left: `calc(${pct(comparison)} - 1px)` }} />
                   )}
                 </div>
-              </Link>
+              </Row>
             </li>
           );
         })}

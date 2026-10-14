@@ -444,6 +444,35 @@ export const comments = pgTable(
   (t) => [index("comments_period_idx").on(t.companyId, t.period, t.anchor)],
 );
 
+/**
+ * A read-only link to one approved month's board pack, for people outside
+ * Vantiq. Only a hash of the token is stored. Like `sessions`, this table sits
+ * outside row-level security because a visitor arrives with a token and no
+ * company; it is only read through the shares module, which filters by
+ * company everywhere else. A link stops working when it expires, is revoked,
+ * or the month is reopened (`pack_approved_at` no longer matches).
+ */
+export const shareLinks = pgTable(
+  "share_links",
+  {
+    id: id(),
+    companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+    period: char("period", { length: 7 }).notNull(),
+    tokenHash: text("token_hash").notNull(),
+    label: text("label").notNull(),
+    note: text("note").notNull().default(""),
+    packApprovedAt: timestamp("pack_approved_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+    viewCount: integer("view_count").notNull().default(0),
+    lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("share_links_token_idx").on(t.tokenHash), index("share_links_company_idx").on(t.companyId, t.period)],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",

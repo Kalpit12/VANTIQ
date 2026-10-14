@@ -15,6 +15,7 @@ const taskName = (target: string) => `“${target.replace(/^\d{4}-\d{2} /, "")}�
 export const AUDIT_AREAS = [
   { key: "pack", label: "Review packs" },
   { key: "close", label: "Close checklist" },
+  { key: "share", label: "Board pack links" },
   { key: "comment", label: "Comments" },
   { key: "explanation", label: "Explanations" },
   { key: "import", label: "Imports" },
@@ -36,7 +37,15 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
     case "pack.reopened":
       return `Reopened ${month(e.target)}: “${String(d.reason ?? "")}”`;
     case "pack.exported":
-      return `Downloaded the ${month(e.target)} review pack as ${String(d.format ?? "pdf").toUpperCase()}`;
+      return d.format === "board_pdf" ? `Downloaded the ${month(e.target)} board pack as PDF` : `Downloaded the ${month(e.target)} review pack as ${String(d.format ?? "pdf").toUpperCase()}`;
+    case "share.created":
+      return `Shared the ${month(e.target)} board pack with ${String(d.label ?? "")} for ${Number(d.days ?? 0)} days`;
+    case "share.revoked":
+      return `Revoked the ${month(e.target)} board pack link for ${String(d.label ?? "")}`;
+    case "share.viewed":
+      return `The ${month(e.target)} board pack link for ${String(d.label ?? "")} was opened`;
+    case "share.downloaded":
+      return `The ${month(e.target)} board pack PDF was downloaded from the link for ${String(d.label ?? "")}`;
     case "explanation.draft":
       return `Drafted ${Array.isArray(d.lines) ? d.lines.length : ""} explanation${Array.isArray(d.lines) && d.lines.length === 1 ? "" : "s"} for ${scope(e.target, names)} (${d.source === "claude" ? "AI" : "auto"})`.replace("  ", " ");
     case "explanation.accept":
