@@ -519,7 +519,9 @@ test("notifications: forgot password by email, invitation and close emails, and 
   const guest = await (await browser.newContext()).newPage();
   await guest.goto("/sign-in");
   await guest.getByRole("link", { name: "Forgot your password?" }).click();
+  await guest.waitForURL("**/forgot-password");
+  await guest.waitForLoadState("networkidle"); // a click before hydration would post the form natively
   await guest.getByLabel("Work email").fill(email);
   await guest.getByRole("button", { name: "Send reset link" }).click();
-  await expect(guest.getByText(`If ${email} has a Vantiq account, a link to reset the password is on its way.`)).toBeVisible();
+  await expect(guest.getByText(`If ${email} has a Vantiq account, a link to reset the password is on its way.`)).toBeVisible({ timeout: 15_000 });
 });
