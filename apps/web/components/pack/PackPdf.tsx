@@ -214,6 +214,15 @@ export function PackPdf({ data, status }: { data: PackData; status: string }) {
             ) : (
               <Text style={{ color: C.warn }}>No explanation yet.</Text>
             )}
+            {(m.comments?.length ?? 0) > 0 && (
+              <View style={{ marginTop: 5, borderTopWidth: 0.5, borderColor: C.line, paddingTop: 3 }}>
+                {m.comments!.map((c, i) => (
+                  <Text key={i} style={{ fontSize: 7.5, color: C.ink2, paddingVertical: 1 }}>
+                    {t(`${c.by ?? "Former member"}, ${formatDate(c.at.slice(0, 10))}: ${c.body}`)}
+                  </Text>
+                ))}
+              </View>
+            )}
           </View>
         ))}
         <Footer data={data} status={status} />

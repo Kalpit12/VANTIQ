@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { billedForTrial, estimateAccrual, Ledger, ytdPeriods, isMaterial } from "@vantiq/domain";
-import { generateSampleCompany, generateSampleTrials, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
+import { billedForTrial, CLOSE_TEMPLATE, estimateAccrual, Ledger, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
+import { generateSampleClose, generateSampleCompany, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
 
 describe("sample company", () => {
   const data = generateSampleCompany();
@@ -53,5 +53,22 @@ describe("sample trials", () => {
     expect(a.estimatedPeriods).toEqual(["2026-09"]);
     // Earlier, before those events, both trials sat close to billing.
     expect(Math.abs(estimateAccrual(atlas!.contract, atlas!.activity, billedFor(atlas!), "2026-06").accrual)).toBeLessThan(150_000_00);
+  });
+});
+
+describe("sample close", () => {
+  it("covers the standard checklist part way through, with comments on real tasks and lines", () => {
+    const { tasks, comments } = generateSampleClose();
+    for (const t of CLOSE_TEMPLATE) expect(tasks.some((x) => x.key === t.key)).toBe(true);
+    const statuses = tasks.map((t) => taskStatus(t, {}));
+    expect(statuses).toContain("done");
+    expect(statuses).toContain("prepared");
+    expect(statuses).toContain("open");
+    const keys = new Set(tasks.map((t) => `task:${t.key}`));
+    const ledger = new Ledger(generateSampleCompany());
+    for (const c of comments) expect(keys.has(c.anchor) || ledger.category(c.anchor.slice(5)) !== undefined).toBe(true);
+    // Nothing is stamped after the demo's "today".
+    for (const t of tasks) for (const at of [t.preparedAt, t.reviewedAt]) if (at) expect(at.slice(0, 10) <= SAMPLE_CLOSE_TODAY).toBe(true);
+    for (const c of comments) expect(c.at.slice(0, 10) <= SAMPLE_CLOSE_TODAY).toBe(true);
   });
 });

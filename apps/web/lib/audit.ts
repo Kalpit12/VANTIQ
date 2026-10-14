@@ -9,8 +9,13 @@ const scope = (s: string, names: Map<string, string>) => {
   return line ? `${names.get(line) ?? line} · ${when}` : when;
 };
 
+/** Close task targets are stored as "2026-09 Task title". */
+const taskName = (target: string) => `“${target.replace(/^\d{4}-\d{2} /, "")}”`;
+
 export const AUDIT_AREAS = [
   { key: "pack", label: "Review packs" },
+  { key: "close", label: "Close checklist" },
+  { key: "comment", label: "Comments" },
   { key: "explanation", label: "Explanations" },
   { key: "import", label: "Imports" },
   { key: "mapping", label: "Account mapping" },
@@ -64,6 +69,21 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
       return `${d.source === "import" ? "Imported" : "Recorded"} CRO activity for ${e.target}: ${Array.isArray(d.months) ? (d.months as string[]).map(month).join(", ") : ""}`;
     case "trial.journal_exported":
       return `Downloaded accrual journal entries for ${month(e.target)}${Array.isArray(d.trials) ? ` (${(d.trials as string[]).join(", ")})` : ""}`;
+    case "close.assigned":
+      return `Assigned ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
+    case "close.prepared":
+      return `Ticked off ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
+    case "close.reviewed":
+      return `Signed off ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
+    case "close.reopened":
+      return `Un-ticked ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
+    case "close.task_added":
+      return `Added the close task ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
+    case "comment.added": {
+      const a = String(d.anchor ?? "");
+      const on = a.startsWith("line:") ? (names.get(a.slice(5)) ?? a.slice(5)) : a.startsWith("task:") ? "a close task" : a;
+      return `Commented on ${on} (${month(String(d.period ?? ""))})`;
+    }
     case "company.renamed":
       return `Renamed the company from “${String(d.from ?? "")}” to “${e.target}”`;
     default:

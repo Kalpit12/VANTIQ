@@ -4,6 +4,7 @@ import { formatAmount, formatCompactCurrency, formatCurrency, formatDate, format
 import { approvePackAction, reopenPackAction } from "@/app/actions/packs";
 import { SubmitButton } from "@/components/AuthForm";
 import { ChartCard } from "@/components/ChartCard";
+import { CommentThread } from "@/components/close/CommentThread";
 import { NoData } from "@/components/NoData";
 import { BulletRows } from "@/components/charts/BulletRows";
 import { TrendChart } from "@/components/charts/TrendChart";
@@ -25,7 +26,8 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
   const pack = st.shown;
   const ready = st.checks.every((c) => c.ok);
   const canApprove = ws.mode === "db" && can.approvePack(ws.role);
-  const error = one(sp, "perr");
+  const error = one(sp, "perr") ?? one(sp, "cerr");
+  const canComment = ws.mode === "db" && !st.locked && can.comment(ws.role);
 
   return (
     <>
@@ -109,7 +111,7 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
                     : "Before approving, finish these checks."}
             </span>
           </div>
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {st.checks.map((c) => (
               <li key={c.key} className="flex gap-2.5 rounded-md border border-line p-3">
                 <span aria-hidden className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[12px] ${c.ok ? "bg-good/15 text-good" : "bg-warn/15 text-warn"}`}>
@@ -190,7 +192,7 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
         ) : (
           <ol className="divide-y divide-line">
             {pack.material.map((m) => (
-              <li key={m.id} className="grid grid-cols-1 gap-3 px-5 py-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+              <li key={m.id} id={`line-${m.id}`} className="grid scroll-mt-20 grid-cols-1 gap-3 px-5 py-4 lg:grid-cols-[240px_minmax(0,1fr)]">
                 <div>
                   <p className="text-[14px] font-medium text-ink">{m.name}</p>
                   <p className="text-[12px] text-ink-3">{m.parentName}</p>
@@ -234,6 +236,19 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
                         </Link>
                       )}
                     </p>
+                  )}
+                  {((m.comments?.length ?? 0) > 0 || canComment) && (
+                    <div className="mt-3 border-t border-line pt-2">
+                      <p className="mb-1.5 text-[12px] font-medium text-ink-2">Comments{m.comments?.length ? ` (${m.comments.length})` : ""}</p>
+                      <CommentThread
+                        comments={m.comments ?? []}
+                        anchor={`line:${m.id}`}
+                        period={pack.period}
+                        back={`/pack?period=${pack.period}#line-${m.id}`}
+                        canComment={canComment}
+                        label={`Comment on ${m.name}`}
+                      />
+                    </div>
                   )}
                 </div>
               </li>

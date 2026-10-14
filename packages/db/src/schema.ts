@@ -393,6 +393,57 @@ export const trialActivity = pgTable(
   (t) => [primaryKey({ columns: [t.trialId, t.period] })],
 );
 
+/**
+ * One task on a month's close checklist. Each month starts from the standard
+ * checklist (CLOSE_TEMPLATE in @vantiq/domain) plus the team's own tasks,
+ * with owners and reviewers carried over from the month before. The owner
+ * ticks a task off (prepared); its reviewer, when it has one, signs it off.
+ */
+export const closeTasks = pgTable(
+  "close_tasks",
+  {
+    id: id(),
+    companyId: companyId(),
+    period: char("period", { length: 7 }).notNull(),
+    key: text("key").notNull(),
+    section: text("section").$type<"books" | "accruals" | "review" | "signoff">().notNull(),
+    title: text("title").notNull(),
+    detail: text("detail").notNull().default(""),
+    dueDay: integer("due_day").notNull(),
+    auto: text("auto").$type<"synced" | "mapped" | "reconciled" | "explained" | "approved">(),
+    href: text("href"),
+    custom: boolean("custom").notNull().default(false),
+    sortOrder: integer("sort_order").notNull(),
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    reviewerId: uuid("reviewer_id").references(() => users.id, { onDelete: "set null" }),
+    preparedBy: uuid("prepared_by").references(() => users.id, { onDelete: "set null" }),
+    preparedAt: timestamp("prepared_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("close_tasks_key_idx").on(t.companyId, t.period, t.key)],
+);
+
+/**
+ * A comment on a month, anchored to something that survives a re-sync: a
+ * variance line by its reporting category (`line:<category id>`) or a close
+ * task by its key (`task:<key>`), never to a transaction row.
+ */
+export const comments = pgTable(
+  "comments",
+  {
+    id: id(),
+    companyId: companyId(),
+    period: char("period", { length: 7 }).notNull(),
+    anchor: text("anchor").notNull(),
+    body: text("body").notNull(),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("comments_period_idx").on(t.companyId, t.period, t.anchor)],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -412,4 +463,6 @@ export const TENANT_TABLES = [
   "review_packs",
   "trials",
   "trial_activity",
+  "close_tasks",
+  "comments",
 ] as const;

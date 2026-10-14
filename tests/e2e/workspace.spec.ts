@@ -16,6 +16,18 @@ async function signUp(page: Page, company: string) {
   return email;
 }
 
+/** Ticks off every manual task on the open close checklist page. */
+async function tickEverything(page: Page) {
+  const ids = await page.locator("li[id^=task-]").filter({ has: page.getByRole("button", { name: "Mark done" }) }).evaluateAll((els) => els.map((e) => e.id));
+  for (const id of ids) {
+    const task = page.locator(`#${id}`);
+    await task.getByRole("button", { name: "Mark done" }).click();
+    await expect(task).toContainText("Ticked off by");
+  }
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+}
+
 test("sign up, load sample data, confirm mappings", async ({ page }) => {
   await signUp(page, "Sample Trial Bio");
   await expect(page.getByText("Bring in your numbers")).toBeVisible();
@@ -189,7 +201,7 @@ test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the 
   await expect(page.getByText("2 of 2 material lines still need an accepted or edited explanation.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve Sep 2026" })).toBeDisabled();
 
-  await page.getByRole("link", { name: "Fix this →" }).click();
+  await page.getByRole("link", { name: "Fix this →" }).first().click();
   await page.getByRole("button", { name: /^Draft 2 explanations$/ }).click();
   const table = page.getByRole("table").last();
   const block = page.getByRole("dialog").getByRole("region", { name: "Explanation" });
@@ -201,8 +213,17 @@ test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the 
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // Approve: the month locks
+  // ...and until the close checklist is done
   await page.getByRole("link", { name: "Review pack" }).click();
+  await expect(page.getByText("8 close tasks are still open or waiting for sign-off.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve Sep 2026" })).toBeDisabled();
+  await page.getByRole("link", { name: "Close checklist" }).click();
+  await expect(page.getByRole("heading", { name: "Close checklist" })).toBeVisible();
+  await tickEverything(page);
+  await expect(page.locator("#task-explained")).toContainText("Checked by Vantiq: passing.");
+
+  // Approve: the month locks
+  await page.goto("/pack?period=2026-09");
   await expect(page.getByText("Ready to approve.")).toBeVisible();
   await page.getByRole("button", { name: "Approve Sep 2026" }).click();
   await expect(page.getByText(/Approved by Casey CFO on/)).toBeVisible();
@@ -222,6 +243,10 @@ test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the 
   await table.getByRole("link", { name: /HX-101 ran/ }).click();
   await expect(block.getByRole("button", { name: "Accept" })).toHaveCount(0);
   await page.keyboard.press("Escape");
+  await page.goto("/close?period=2026-09");
+  await expect(page.getByText("The checklist and its comments are locked.")).toBeVisible();
+  await expect(page.locator("#task-approved")).toContainText("Checked by Vantiq: passing.");
+  await expect(page.getByRole("button", { name: /Mark done|Undo/ })).toHaveCount(0);
 
   // Audit log
   await page.goto("/settings/audit");
@@ -281,4 +306,66 @@ test("trial accruals: record late CRO activity, add a change order, import a rep
   await page.goto("/settings/audit?area=trial");
   await expect(page.getByText("Imported CRO activity for HX-101-201: Sep 2026")).toBeVisible();
   await expect(page.getByText("Added change order 1 to HX-204-101, effective Sep 2026: Expansion cohort")).toBeVisible();
+});
+
+test("close checklist: owner and reviewer, sign-off, comments on tasks and lines", async ({ page, browser }) => {
+  await signUp(page, "Close Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Members" }).click();
+  await expect(page.getByRole("heading", { name: "Add someone" })).toBeVisible();
+  const finEmail = `fin-${Date.now()}@example.com`;
+  await page.getByLabel("Name").fill("Fin Finance");
+  await page.getByLabel("Work email").fill(finEmail);
+  await page.getByLabel("Role", { exact: true }).selectOption("finance");
+  await page.getByRole("button", { name: "Add member" }).click();
+  const temp = (await page.locator("code").textContent())!.trim();
+
+  // The CFO makes Fin the owner of the bank reconciliation and reviews it.
+  await page.goto("/close?period=2026-09");
+  const bank = page.locator("#task-bank");
+  await bank.getByText("Assign").click();
+  await bank.getByLabel("Owner").selectOption({ label: "Fin Finance" });
+  await bank.getByLabel("Reviewer").selectOption({ label: "Casey CFO" });
+  await bank.getByRole("button", { name: "Save" }).click();
+  await expect(bank).toContainText("Owner: Fin Finance");
+  await expect(bank).toContainText("Reviewer: Casey CFO");
+  // The reviewer can't prepare the task they review.
+  await expect(bank.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+  await bank.getByText("Comments").click();
+  await bank.getByLabel("Comment on Reconcile bank and investment accounts").fill("Use the SVB statement, not the online balance.");
+  await bank.getByRole("button", { name: "Comment" }).click();
+  await expect(bank).toContainText("Use the SVB statement, not the online balance.");
+
+  // Fin sees it under My tasks and ticks it off.
+  const fin = await (await browser.newContext()).newPage();
+  await fin.goto("/sign-in");
+  await fin.getByLabel("Work email").fill(finEmail);
+  await fin.getByLabel("Password").fill(temp);
+  await fin.getByRole("button", { name: "Sign in" }).click();
+  await expect(fin.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await fin.goto("/close?period=2026-09&mine=1");
+  await expect(fin.locator("li[id^=task-]")).toHaveCount(1);
+  await fin.locator("#task-bank").getByRole("button", { name: "Mark done" }).click();
+  await expect(fin.locator("#task-bank")).toContainText("Ticked off by Fin Finance");
+  await expect(fin.locator("#task-bank").getByRole("button", { name: "Sign off" })).toHaveCount(0);
+
+  // The CFO signs it off.
+  await page.reload();
+  await expect(bank).toContainText("Waiting for sign-off");
+  await bank.getByRole("button", { name: "Sign off" }).click();
+  await expect(bank).toContainText("signed off by Casey CFO");
+
+  // Comments on a variance line show in the review pack.
+  await page.goto("/pack?period=2026-09");
+  await page.getByLabel(/^Comment on CRO/).first().fill("CO4 visits ran ahead of plan; Meridian will catch up in October.");
+  await page.getByRole("button", { name: "Comment" }).first().click();
+  await expect(page.getByText("CO4 visits ran ahead of plan; Meridian will catch up in October.")).toBeVisible();
+
+  await page.goto("/settings/audit");
+  for (const text of ["Signed off “Reconcile bank and investment accounts”", "Ticked off “Reconcile bank and investment accounts”", "Commented on"]) {
+    await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
+  }
 });

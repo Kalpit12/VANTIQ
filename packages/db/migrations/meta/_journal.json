@@ -43,6 +43,13 @@
       "when": 1791971490907,
       "tag": "0005_trials",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791973325330,
+      "tag": "0006_close_checklist",
+      "breakpoints": true
     }
   ]
 }

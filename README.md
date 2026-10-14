@@ -68,7 +68,17 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | 7. Trial accruals | Trials with CRO contracts priced by driver (monthly fee, sites, patients, visits), change orders, monthly CRO activity (entered or imported), accrual worked out step by step, month-end journal entry CSV; charts C11 (contract vs work done vs billed), C12 (trial timeline), C13 (accrual by CRO) | Done |
-| 8. Close checklist | Close tasks, owners, comments, approvals | Next |
+| 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C15 (close calendar); the pack can't be approved until the checklist is done | Done |
+| 9. Board pack sharing | Board pack export and expiring share links | Next |
+
+### Milestone 8 decisions
+
+- **The checklist** starts each month from 13 standard biotech close tasks in four sections (books, accruals and adjustments, review, sign-off), plus any tasks the team adds. Owners, reviewers and the team's own tasks carry forward from the previous month; ticks and sign-offs don't.
+- **Due dates** are business days into the following month ("day 3"), the way close calendars are written. A task is late once its day has passed and it isn't done.
+- **Automatic tasks.** Five tasks are checked by Vantiq itself (transactions in, accounts mapped, books agree with the source, variances explained, pack approved) and can't be ticked by hand.
+- **Two-person sign-off.** A task with a reviewer is done only when the reviewer signs it off, and nobody can sign off a task they prepared. Admins and finance can tick any task; anyone else, viewers included, can tick the tasks they own, so department heads can take part without edit access to the books.
+- **Comments** are anchored to a reporting line or a close task, never to a transaction, so they survive re-syncs. Anyone in the company can comment. Comments on material lines appear in the review pack and its PDF and are part of the approved snapshot.
+- **Approval** now also needs every manual close task done. Once a month is approved, its checklist and comments are locked with it.
 
 ### Milestone 7 decisions
 
