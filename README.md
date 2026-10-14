@@ -70,6 +70,15 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 7. Trial accruals | Trials with CRO contracts priced by driver (monthly fee, sites, patients, visits), change orders, monthly CRO activity (entered or imported), accrual worked out step by step, month-end journal entry CSV; charts C11 (contract vs work done vs billed), C12 (trial timeline), C13 (accrual by CRO) | Done |
 | 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C15 (close calendar); the pack can't be approved until the checklist is done | Done |
 | 9. Board pack sharing | Board pack (board-ready subset of the approved review pack) as a page and PDF, read-only links for the board that expire, revoke, open counts, audit | Done |
+| 10. Grants and income | Schedules for grants, partner milestones and licensing with expected receipts and likelihood, matched to income in the books; received, overdue, risk-weighted next 12 months, grant left to draw; chart C14 (receipts timeline) | Done |
+
+### Milestone 10 decisions
+
+- **Received money is never entered twice.** A schedule names who pays; income from that payer in the matching revenue line (Grant income for grants, Collaboration revenue for milestones and licensing) is matched to the schedule in order. A payment counts toward a receipt when it is within 2% of the amount and no earlier than two months before it was expected.
+- **Overdue** means the expected month has closed and no matching payment is in the books. A receipt expected in the month being viewed is still just expected.
+- **Likelihood** weights each receipt not yet received: "expected in the next 12 months" shows both the weighted figure and the full amount. The chart shades expected money by likelihood, so a 20% Phase 3 milestone reads as much less certain than a 95% grant drawdown.
+- **Schedules are edited in place** (add, change, remove a receipt) and every change is in the audit log with the old and new month, amount and likelihood.
+- Receipts live as JSON on `income_sources`, like a trial's contract lines, because a schedule is small and always read whole.
 
 ### Milestone 9 decisions
 

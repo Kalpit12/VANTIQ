@@ -7,3 +7,4 @@ export * from "./format";
 export * from "./chart";
 export * from "./accruals";
 export * from "./close";
+export * from "./income";

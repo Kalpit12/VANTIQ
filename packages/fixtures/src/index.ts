@@ -216,3 +216,4 @@ export function generateSampleCompany(seed = 7): LedgerData {
 export * from "./files";
 export * from "./trials";
 export * from "./close";
+export * from "./income";

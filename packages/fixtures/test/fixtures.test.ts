@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { billedForTrial, CLOSE_TEMPLATE, estimateAccrual, Ledger, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
-import { generateSampleClose, generateSampleCompany, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
+import { billedForTrial, CLOSE_TEMPLATE, estimateAccrual, Ledger, receivedFor, scheduleStatus, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
+import { generateSampleClose, generateSampleCompany, generateSampleIncome, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
 
 describe("sample company", () => {
   const data = generateSampleCompany();
@@ -70,5 +70,16 @@ describe("sample close", () => {
     // Nothing is stamped after the demo's "today".
     for (const t of tasks) for (const at of [t.preparedAt, t.reviewedAt]) if (at) expect(at.slice(0, 10) <= SAMPLE_CLOSE_TODAY).toBe(true);
     for (const c of comments) expect(c.at.slice(0, 10) <= SAMPLE_CLOSE_TODAY).toBe(true);
+  });
+});
+
+describe("sample income", () => {
+  it("matches the sample ledger: grant drawn on time, Novagen's milestone late, Kairo's fee overdue", () => {
+    const data = generateSampleCompany();
+    const [nih, novagen, kairo] = generateSampleIncome().map((s) => scheduleStatus(s, receivedFor(data, s), SAMPLE_LAST_PERIOD));
+    expect(nih!.filter((r) => r.status === "received")).toHaveLength(8);
+    expect(nih!.filter((r) => r.status === "received").every((r) => r.monthsLate === 0)).toBe(true);
+    expect(novagen!.find((r) => r.id === "nov-2")).toMatchObject({ status: "received", monthsLate: 2 });
+    expect(kairo!.find((r) => r.id === "kai-1")).toMatchObject({ status: "overdue" });
   });
 });

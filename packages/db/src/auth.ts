@@ -115,6 +115,8 @@ export const can = {
   comment: (_r: Role) => true,
   /** Share an approved month's board pack outside Vantiq. */
   sharePack: (r: Role) => r === "admin" || r === "finance",
+  /** Set up grant, milestone and licensing schedules. */
+  manageIncome: (r: Role) => r === "admin" || r === "finance",
 };
 
 export async function listMembers(db: Db, companyId: string) {
