@@ -113,6 +113,8 @@ export const can = {
   manageClose: (r: Role) => r === "admin" || r === "finance",
   /** Anyone in the company can comment, including viewers such as department heads. */
   comment: (_r: Role) => true,
+  /** Share an approved month's board pack outside Vantiq. */
+  sharePack: (r: Role) => r === "admin" || r === "finance",
 };
 
 export async function listMembers(db: Db, companyId: string) {

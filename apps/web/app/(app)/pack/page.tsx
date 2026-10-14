@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { can } from "@vantiq/db";
+import { cookies, headers } from "next/headers";
+import { can, getDb, listShareLinks, type ShareLinkRow } from "@vantiq/db";
 import { formatAmount, formatCompactCurrency, formatCurrency, formatDate, formatSignedAmount, type Variance } from "@vantiq/domain";
 import { approvePackAction, reopenPackAction } from "@/app/actions/packs";
 import { SubmitButton } from "@/components/AuthForm";
+import { SharePanel } from "@/components/board/SharePanel";
 import { ChartCard } from "@/components/ChartCard";
 import { CommentThread } from "@/components/close/CommentThread";
 import { NoData } from "@/components/NoData";
@@ -10,12 +12,25 @@ import { BulletRows } from "@/components/charts/BulletRows";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
 import { getWorkspace } from "@/lib/data";
+import { NEW_SHARE_COOKIE } from "@/lib/board";
 import { packState, packStatusText } from "@/lib/pack";
 import { one, resolveView, type SearchParams } from "@/lib/view";
 
 export const metadata = { title: "Review pack · Vantiq Finance" };
 
 const signed = (v: Variance) => (v.delta === 0 ? "text-ink-3" : v.favorable ? "text-good" : "text-bad");
+
+/** The link created a moment ago, if any: shown once, then only its row remains. */
+async function takeNewLink(links: ShareLinkRow[]) {
+  const raw = (await cookies()).get(NEW_SHARE_COOKIE)?.value;
+  const [id, token] = raw?.split(".") ?? [];
+  const link = links.find((l) => l.id === id && l.status === "active");
+  if (!link || !token) return null;
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return { url: `${proto}://${host}/share/${token}`, label: link.label };
+}
 
 export default async function PackPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -28,6 +43,9 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
   const canApprove = ws.mode === "db" && can.approvePack(ws.role);
   const error = one(sp, "perr") ?? one(sp, "cerr");
   const canComment = ws.mode === "db" && !st.locked && can.comment(ws.role);
+  const canShare = ws.mode === "db" && can.sharePack(ws.role);
+  const links = ws.mode === "db" ? await listShareLinks(getDb(), ws.companyId!, pack.period) : [];
+  const newLink = await takeNewLink(links);
 
   return (
     <>
@@ -135,7 +153,18 @@ export default async function PackPage({ searchParams }: { searchParams: Promise
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <SharePanel
+        period={pack.period}
+        label={pack.label}
+        mode={ws.mode}
+        locked={st.locked}
+        canShare={canShare}
+        links={links}
+        newLink={newLink}
+        error={one(sp, "serr")}
+      />
+
+      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {pack.kpis.map((k) => (
           <Card key={k.label} className="p-4">
             <p className="text-[12px] text-ink-3">{k.label}</p>

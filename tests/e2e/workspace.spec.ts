@@ -178,7 +178,7 @@ test("draft explanations, then accept one and edit another", async ({ page }) =>
   await expect(page.getByText("Confirmed")).toHaveCount(2);
 });
 
-test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the pack, PDF, audit log", async ({ page }) => {
+test("Phase 1 gate: sample data, mapping, drill-down, explanations, close, approve the pack, PDF, board link, audit log", async ({ page, browser }) => {
   await signUp(page, "Gate Bio");
   await page.getByRole("button", { name: "Try it with sample data" }).click();
   await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -258,6 +258,36 @@ test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the 
   const csv = await page.request.get("/settings/audit/export");
   expect(csv.headers()["content-type"]).toContain("text/csv");
   expect(await csv.text()).toContain("pack.approved");
+
+  // Share the board pack with a link that expires
+  await page.goto("/pack?period=2026-09");
+  await page.getByLabel("Who is it for?").fill("Board of directors");
+  await page.getByLabel("Link works for").selectOption("7");
+  await page.getByLabel("Note to the board (optional)").fill("CRO spend ran ahead of plan; runway is unchanged.");
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(page.getByText("Link for Board of directors is ready.")).toBeVisible();
+  const url = await page.getByLabel("Board pack link for Board of directors").inputValue();
+  expect(url).toMatch(/\/share\/[A-Za-z0-9_-]{32}$/);
+  const guest = await (await browser.newContext()).newPage();
+  const res = await guest.goto(url);
+  expect(res!.headers()["x-robots-tag"]).toContain("noindex");
+  expect(res!.headers()["referrer-policy"]).toBe("no-referrer");
+  await expect(guest.getByRole("heading", { name: "Gate Bio" })).toBeVisible();
+  await expect(guest.getByText("CRO spend ran ahead of plan; runway is unchanged.")).toBeVisible();
+  await expect(guest.getByText(/Approved by Casey CFO on/)).toBeVisible();
+  // The board sees no cited transactions and has no way into the app.
+  await expect(guest.getByText("20 Sep 2026")).toHaveCount(0);
+  await expect(guest.getByRole("link", { name: "Overview" })).toHaveCount(0);
+  const pdf = await guest.request.get(`${url}/pdf`);
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  // The link is shown once; afterwards only its row remains, counting the view and the download.
+  await page.reload();
+  await expect(page.getByText("Link for Board of directors is ready.")).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Board of directors/ })).toContainText("2 times");
+  await page.getByRole("button", { name: "Revoke the link for Board of directors" }).click();
+  await expect(page.getByRole("row", { name: /Board of directors/ })).toContainText("Revoked");
+  await guest.goto(url);
+  await expect(guest.getByRole("heading", { name: "This link was turned off" })).toBeVisible();
 
   // Reopen with a reason
   await page.goto("/pack?period=2026-09");

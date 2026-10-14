@@ -38,10 +38,10 @@ const s = StyleSheet.create({
 const tone = (v: Variance) => (v.delta === 0 ? C.ink3 : v.favorable ? C.good : C.bad);
 const pct = (v: Variance) => (v.comparison === 0 ? (v.actual === 0 ? "-" : "No budget") : t(formatSignedPct(v.deltaPct)));
 
-function Footer({ data, status }: { data: PackData; status: string }) {
+function Footer({ data, status, board }: { data: PackData; status: string; board?: boolean }) {
   return (
     <View style={s.footer} fixed>
-      <Text>{t(`${data.companyName} · Review pack · ${data.label} · ${status}`)}</Text>
+      <Text>{t(`${data.companyName} · ${board ? "Board pack · Confidential" : "Review pack"} · ${data.label} · ${status}`)}</Text>
       <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
     </View>
   );
@@ -113,13 +113,23 @@ function CashLine({ data }: { data: { label: string; value: number }[] }) {
   );
 }
 
-export function PackPdf({ data, status }: { data: PackData; status: string }) {
+/**
+ * The review pack as a PDF. `board` gives the board pack: the same layout from
+ * the board subset of the data, with the CFO's note on the first page.
+ */
+export function PackPdf({ data, status, board, note }: { data: PackData; status: string; board?: boolean; note?: string }) {
   return (
-    <Document title={`${data.companyName} review pack ${data.label}`} author="Vantiq Finance" subject="Monthly finance review">
+    <Document title={`${data.companyName} ${board ? "board pack" : "review pack"} ${data.label}`} author="Vantiq Finance" subject="Monthly finance review">
       <Page size="A4" orientation="landscape" style={s.page}>
-        <Text style={{ fontSize: 9, color: C.accent, fontFamily: "Helvetica-Bold", marginBottom: 6 }}>MONTHLY REVIEW PACK</Text>
+        <Text style={{ fontSize: 9, color: C.accent, fontFamily: "Helvetica-Bold", marginBottom: 6 }}>{board ? "BOARD PACK" : "MONTHLY REVIEW PACK"}</Text>
         <Text style={s.h1}>{t(`${data.companyName} · ${data.label}`)}</Text>
-        <Text style={[s.muted, { marginBottom: 16 }]}>{t(`${status} · Prepared ${formatDate(data.builtAt.slice(0, 10))} · USD`)}</Text>
+        <Text style={[s.muted, { marginBottom: note ? 8 : 16 }]}>{t(`${status} · Prepared ${formatDate(data.builtAt.slice(0, 10))} · USD`)}</Text>
+        {note ? (
+          <View style={[s.card, { marginBottom: 12, borderLeftWidth: 2, borderLeftColor: C.accent }]}>
+            <Text style={[s.muted, { fontSize: 7.5, marginBottom: 2 }]}>Note to the board</Text>
+            <Text>{t(note)}</Text>
+          </View>
+        ) : null}
 
         <View style={[s.row, { gap: 10, marginBottom: 16 }]}>
           {data.kpis.map((k) => (
@@ -149,7 +159,7 @@ export function PackPdf({ data, status }: { data: PackData; status: string }) {
             <Text style={[s.muted, { fontSize: 7.5, marginTop: 4 }]}>Bars: actual. Dashed line: budget.</Text>
           </View>
         </View>
-        <Footer data={data} status={status} />
+        <Footer data={data} status={status} board={board} />
       </Page>
 
       <Page size="A4" orientation="landscape" style={s.page}>
@@ -176,7 +186,7 @@ export function PackPdf({ data, status }: { data: PackData; status: string }) {
             <Text style={[s.td, { width: 62, textAlign: "right", color: tone(l.ytd) }]}>{pct(l.ytd)}</Text>
           </View>
         ))}
-        <Footer data={data} status={status} />
+        <Footer data={data} status={status} board={board} />
       </Page>
 
       <Page size="A4" orientation="landscape" style={s.page}>
@@ -225,7 +235,7 @@ export function PackPdf({ data, status }: { data: PackData; status: string }) {
             )}
           </View>
         ))}
-        <Footer data={data} status={status} />
+        <Footer data={data} status={status} board={board} />
       </Page>
 
       <Page size="A4" orientation="landscape" style={s.page}>
@@ -273,7 +283,7 @@ export function PackPdf({ data, status }: { data: PackData; status: string }) {
             )}
           </View>
         </View>
-        <Footer data={data} status={status} />
+        <Footer data={data} status={status} board={board} />
       </Page>
     </Document>
   );

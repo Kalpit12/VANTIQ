@@ -60,6 +60,12 @@ import {
   listComments,
   prepareCloseTask,
   reviewCloseTask,
+  createShareLink,
+  listShareLinks,
+  openShareLink,
+  revokeShareLink,
+  ShareError,
+  shareLinks,
   type Db,
 } from "../src";
 
@@ -555,6 +561,54 @@ describe("close checklist", () => {
 
     expect(await getPack<{ cro: number }>(db, a.companyId, "2026-09")).toMatchObject({ status: "approved", snapshot: { cro: before } });
     expect(await listComments(db, a.companyId, "2026-09")).toMatchObject([{ anchor: "line:rd-cro", body: "Meridian change order 4 started in July.", authorName: "Resync Co CFO" }]);
+  });
+});
+
+describe("board pack share links", () => {
+  it("shares only approved months, expires, can be revoked, and stops working when the month is reopened", async () => {
+    const a = await freshCompany("Share Co");
+    const input = { period: "2026-09", label: "Board of directors", note: "Ahead of Thursday's meeting.", days: 14 };
+    await expect(createShareLink(db, a.companyId, a.userId, input)).rejects.toThrow(/Approve the Sep 2026 review pack/);
+    await approvePack(db, a.companyId, a.userId, "2026-09", { total: 1 });
+    await expect(createShareLink(db, a.companyId, a.userId, { ...input, days: 365 })).rejects.toThrow(ShareError);
+    await expect(createShareLink(db, a.companyId, a.userId, { ...input, label: " " })).rejects.toThrow(ShareError);
+
+    const t0 = new Date("2026-10-14T12:00:00Z");
+    const link = await createShareLink(db, a.companyId, a.userId, input, t0);
+    expect(link.expiresAt.toISOString()).toBe("2026-10-28T12:00:00.000Z");
+    // Only a hash is stored.
+    const [stored] = await db.select().from(shareLinks).where(eq(shareLinks.id, link.id));
+    expect(stored!.tokenHash).not.toContain(link.token);
+    expect(JSON.stringify(stored)).not.toContain(link.token);
+
+    const opened = await openShareLink<{ total: number }>(db, link.token, "view", t0);
+    expect(opened).toMatchObject({ status: "active", snapshot: { total: 1 }, label: "Board of directors", note: "Ahead of Thursday's meeting.", approvedByName: "Share Co CFO" });
+    await openShareLink(db, link.token, "pdf", t0);
+    expect(await openShareLink(db, link.token, "view", new Date("2026-10-28T12:00:01Z"))).toEqual({ status: "expired" });
+    expect(await openShareLink(db, "not-a-real-token-at-all-xx", "view")).toEqual({ status: "missing" });
+    expect(await openShareLink(db, "x'; drop table share_links; --", "view")).toEqual({ status: "missing" });
+
+    const [row] = await listShareLinks(db, a.companyId, "2026-09", t0);
+    expect(row).toMatchObject({ label: "Board of directors", viewCount: 2, status: "active", createdByName: "Share Co CFO" });
+
+    // Reopening withdraws the link; approving again doesn't bring it back.
+    await reopenPack(db, a.companyId, a.userId, "2026-09", "Late invoice");
+    expect(await openShareLink(db, link.token, "view", t0)).toEqual({ status: "withdrawn" });
+    await approvePack(db, a.companyId, a.userId, "2026-09", { total: 2 });
+    expect(await openShareLink(db, link.token, "view", t0)).toEqual({ status: "withdrawn" });
+
+    const fresh = await createShareLink(db, a.companyId, a.userId, input, t0);
+    expect(await openShareLink(db, fresh.token, "view", t0)).toMatchObject({ status: "active", snapshot: { total: 2 } });
+    // Another company can't revoke it.
+    const b = await freshCompany("Other Share Co");
+    await expect(revokeShareLink(db, b.companyId, b.userId, fresh.id)).rejects.toThrow(ShareError);
+    expect(await listShareLinks(db, b.companyId, "2026-09")).toHaveLength(0);
+    await revokeShareLink(db, a.companyId, a.userId, fresh.id);
+    expect(await openShareLink(db, fresh.token, "view", t0)).toEqual({ status: "revoked" });
+    await expect(revokeShareLink(db, a.companyId, a.userId, fresh.id)).rejects.toThrow(/already revoked/);
+
+    const audit = await listAuditEvents(db, a.companyId, { area: "share" });
+    expect(audit.map((e) => e.action).sort()).toEqual(["share.created", "share.created", "share.downloaded", "share.revoked", "share.viewed", "share.viewed"]);
   });
 });
 

@@ -15,3 +15,4 @@ export * from "./packs";
 export * from "./audit";
 export * from "./trials";
 export * from "./close";
+export * from "./shares";

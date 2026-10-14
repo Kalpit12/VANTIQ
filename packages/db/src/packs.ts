@@ -86,6 +86,6 @@ export async function reopenPack(db: Db, companyId: string, userId: string, peri
   });
 }
 
-export async function recordPackExport(db: Db, companyId: string, userId: string, period: Period, format: "pdf") {
+export async function recordPackExport(db: Db, companyId: string, userId: string, period: Period, format: "pdf" | "board_pdf") {
   await withCompany(db, companyId, (tx) => tx.insert(auditEvents).values({ companyId, actorId: userId, action: "pack.exported", target: period, detail: { format } }));
 }
