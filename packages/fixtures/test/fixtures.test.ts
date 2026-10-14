@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Ledger, ytdPeriods, isMaterial } from "@vantiq/domain";
-import { generateSampleCompany, SAMPLE_LAST_PERIOD } from "../src";
+import { billedForTrial, estimateAccrual, Ledger, ytdPeriods, isMaterial } from "@vantiq/domain";
+import { generateSampleCompany, generateSampleTrials, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
 
 describe("sample company", () => {
   const data = generateSampleCompany();
@@ -34,5 +34,24 @@ describe("sample company", () => {
       opex: ledger.variance({ periods: p, categoryIds: ["opex"] }),
       cash: ledger.cashAt(SAMPLE_LAST_PERIOD),
     });
+  });
+});
+
+describe("sample trials", () => {
+  const ledger = new Ledger(generateSampleCompany());
+  const billedFor = (t: SampleTrial) => billedForTrial(ledger.data, t);
+
+  it("match the ledger's CROs and programs, and tell the two accrual stories", () => {
+    const [meridian, atlas] = generateSampleTrials();
+    const m = estimateAccrual(meridian!.contract, meridian!.activity, billedFor(meridian!), SAMPLE_TRIALS_AS_OF);
+    const a = estimateAccrual(atlas!.contract, atlas!.activity, billedFor(atlas!), SAMPLE_TRIALS_AS_OF);
+    // Meridian: change order 4 work ran ahead of billing.
+    expect(m.accrual).toBeGreaterThan(500_000_00);
+    expect(m.lines.every((l) => l.unitsOverContract === 0)).toBe(true);
+    // Atlas: deferred start-up fees, and September not reported yet.
+    expect(a.accrual).toBeGreaterThan(500_000_00);
+    expect(a.estimatedPeriods).toEqual(["2026-09"]);
+    // Earlier, before those events, both trials sat close to billing.
+    expect(Math.abs(estimateAccrual(atlas!.contract, atlas!.activity, billedFor(atlas!), "2026-06").accrual)).toBeLessThan(150_000_00);
   });
 });

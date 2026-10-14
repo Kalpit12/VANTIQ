@@ -7,6 +7,8 @@ const pages = [
   { path: "/programs", heading: "R&D programs" },
   { path: "/statements", heading: "Statements" },
   { path: "/pack", heading: "Review pack" },
+  { path: "/trials", heading: "Trial accruals" },
+  { path: "/trials/hx-204-101", heading: "HX-204-101" },
 ];
 
 for (const p of pages) {
@@ -101,4 +103,21 @@ test("the review pack downloads as a PDF", async ({ page }) => {
   expect(res.headers()["content-type"]).toBe("application/pdf");
   expect(res.headers()["content-disposition"]).toContain("Helixa-Therapeutics-review-pack-2026-09.pdf");
   expect((await res.body()).subarray(0, 5).toString()).toBe("%PDF-");
+});
+
+test("trial accruals show the work done against billing, step by step, and export journal entries", async ({ page }) => {
+  await page.goto("/trials?period=2026-09");
+  await expect(page.getByText("$1.5M", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 mo estimated")).toBeVisible();
+  await page.getByRole("link", { name: "HX-101-201" }).click();
+  await expect(page.getByRole("heading", { name: "Work done is $816k ahead of billing" })).toBeVisible();
+  await expect(page.getByText("$816,016.63").first()).toBeVisible();
+  await expect(page.getByText("Change order 4 · from Jul 2026")).toBeVisible();
+  const csv = await page.request.get("/trials/journal?period=2026-09");
+  const text = await csv.text();
+  expect(text.split("\r\n").filter(Boolean)).toHaveLength(5);
+  expect(text).toContain("2150,Accrued clinical trial costs,,816016.63");
+  // Earlier months show the accrual as it stood then.
+  await page.goto("/trials/hx-204-101?period=2026-06");
+  await expect(page.getByText("hasn't reported")).toHaveCount(0);
 });

@@ -5,6 +5,7 @@ import type { Db } from "./client";
 import { commitImport, createDraft } from "./imports";
 import { programs } from "./schema";
 import { withCompany } from "./tenant";
+import { loadSampleTrials } from "./trials";
 
 /**
  * Loads the Helixa sample data into a company through the real import path
@@ -29,6 +30,7 @@ export async function loadSampleData(db: Db, companyId: string, userId: string) 
     const id = await createDraft(db, companyId, userId, kind, name, table);
     await commitImport(db, companyId, userId, id, guessColumns(table.headers, kind));
   }
+  await loadSampleTrials(db, companyId, userId);
 }
 
 /** Just the sample budget, for a company whose actuals come from the sandbox connection. */
@@ -36,4 +38,5 @@ export async function loadSampleBudget(db: Db, companyId: string, userId: string
   const table = parseCsv(sampleFiles().budgetCsv);
   const id = await createDraft(db, companyId, userId, "budget", "helixa-budget.csv", table);
   await commitImport(db, companyId, userId, id, guessColumns(table.headers, "budget"));
+  await loadSampleTrials(db, companyId, userId);
 }

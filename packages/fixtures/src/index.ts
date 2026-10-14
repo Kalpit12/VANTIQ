@@ -21,8 +21,8 @@ import {
  * real to explain.
  */
 
-export const SAMPLE_FIRST_PERIOD: Period = "2024-10";
-export const SAMPLE_LAST_PERIOD: Period = "2026-09";
+import { SAMPLE_FIRST_PERIOD, SAMPLE_LAST_PERIOD } from "./periods";
+export { SAMPLE_FIRST_PERIOD, SAMPLE_LAST_PERIOD };
 
 const categories: Category[] = STANDARD_CATEGORIES;
 
@@ -214,3 +214,4 @@ export function generateSampleCompany(seed = 7): LedgerData {
   };
 }
 export * from "./files";
+export * from "./trials";

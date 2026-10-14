@@ -10,6 +10,7 @@ const NAV = [
   { href: "/overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { href: "/variances", label: "Variances", icon: "M4 19h16M7 15V9m5 6V5m5 10v-3" },
   { href: "/programs", label: "R&D programs", icon: "M9 3h6M10 3v6L5 18a2 2 0 002 3h10a2 2 0 002-3l-5-9V3" },
+  { href: "/trials", label: "Trial accruals", icon: "M4 6h10M4 12h16M4 18h7M17 4v4M11 16v4" },
   { href: "/statements", label: "Statements", icon: "M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4" },
   { href: "/pack", label: "Review pack", icon: "M9 12l2 2 4-4M7 3h10a2 2 0 012 2v16l-7-3-7 3V5a2 2 0 012-2z" },
 ];

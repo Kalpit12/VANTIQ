@@ -63,6 +63,22 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 5. AI explanations | Drafted explanation for every material variance, citing its transactions (Claude when a key is set, built-in rules otherwise); accept, edit, reject on Overview and Variances | Done |
 | 6. Review pack | Monthly pack page and PDF; approval checks and month locking; audit log with CSV export; company settings; Phase 1 end-to-end and accessibility tests | Done |
 
+### Phase 2
+
+| Milestone | Scope | Status |
+| --- | --- | --- |
+| 7. Trial accruals | Trials with CRO contracts priced by driver (monthly fee, sites, patients, visits), change orders, monthly CRO activity (entered or imported), accrual worked out step by step, month-end journal entry CSV; charts C11 (contract vs work done vs billed), C12 (trial timeline), C13 (accrual by CRO) | Done |
+| 8. Close checklist | Close tasks, owners, comments, approvals | Next |
+
+### Milestone 7 decisions
+
+- **The accrual** for a trial is the work done to date minus what the CRO billed to date. Work done is each driver's units completed times its price, never more than the units contracted; units beyond the contract are shown and not counted. A change order adds units at its own prices from the month it takes effect, and units are priced against the original contract first.
+- **Billed to date** comes from the ledger: CRO-line spend from the vendor named on the trial, tagged to the trial's program. Nothing needs entering twice.
+- **Late CRO reports.** A month the CRO hasn't reported is estimated from the average of its last three reports and flagged until the real numbers arrive.
+- **Journal entries** book the full accrual (or prepayment) on the last day of the month, to be reversed the next day: Dr 6110 CRO clinical trial services, Cr 2150 Accrued clinical trial costs. The CSV imports into most accounting systems; Vantiq doesn't post it.
+- Contract lines and change orders are stored as JSON on the trial rather than in separate tables, since they're small and always read together. Every change is in the audit log.
+- The sample company has two trials matched to its CRO invoices: Meridian's change order 4 work ran ahead of billing, and Atlas deferred start-up fees while its September report is late.
+
 ### Milestone 6 decisions
 
 - **One pack per month.** The pack shows the month's headline numbers, a summary, every material variance with its explanation and cited transactions, budget vs actual for the month and year to date, R&D by program, and cash and runway. The page and the PDF render from the same data, so they always agree.

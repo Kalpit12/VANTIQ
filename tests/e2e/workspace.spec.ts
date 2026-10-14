@@ -243,3 +243,42 @@ test("Phase 1 gate: sample data, mapping, drill-down, explanations, approve the 
   await page.goto("/settings");
   await expect(page.getByText("Reopened by Casey CFO")).toBeVisible();
 });
+
+test("trial accruals: record late CRO activity, add a change order, import a report", async ({ page }) => {
+  await signUp(page, "Trial Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("link", { name: "Trial accruals" }).click();
+  await expect(page.getByText("1 mo estimated")).toBeVisible();
+  await page.getByRole("link", { name: "HX-204-101" }).click();
+  await expect(page.getByText("Atlas CRO hasn't reported Sep 2026 yet.")).toBeVisible();
+
+  // Atlas's September report arrives
+  await page.getByLabel("Month", { exact: true }).fill("2026-09");
+  await page.getByLabel("sites", { exact: true }).fill("0");
+  await page.getByLabel("patients", { exact: true }).fill("2");
+  await page.getByLabel("visits", { exact: true }).fill("150");
+  await page.getByRole("button", { name: "Record activity" }).click();
+  await expect(page.getByText("hasn't reported")).toHaveCount(0);
+
+  await page.getByText("Add a change order").click();
+  await page.getByLabel("Takes effect").fill("2026-09");
+  await page.getByLabel("What changed").fill("Expansion cohort");
+  await page.locator("#co-units-patient").fill("12");
+  await page.locator("#co-cost-patient").fill("32,000");
+  await page.getByRole("button", { name: "Add change order" }).click();
+  await expect(page.getByText("Change order 1 · from Sep 2026")).toBeVisible();
+  await expect(page.getByText("+12 patients at $32,000")).toBeVisible();
+
+  // A CRO report file
+  await page.getByRole("link", { name: "← All trials" }).click();
+  const csv = "Trial ID,Month,Sites,Patients,Visits\nHX-101-201,2026-09,1,14,500\nNOPE,2026-09,1,1,1\n";
+  await page.getByLabel("Activity file").setInputFiles({ name: "cro.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Import activity" }).click();
+  await expect(page.getByText('Saved 1 month of activity for 1 trial. Skipped 1: Row 3: no trial "NOPE".')).toBeVisible();
+
+  await page.goto("/settings/audit?area=trial");
+  await expect(page.getByText("Imported CRO activity for HX-101-201: Sep 2026")).toBeVisible();
+  await expect(page.getByText("Added change order 1 to HX-204-101, effective Sep 2026: Expansion cohort")).toBeVisible();
+});
