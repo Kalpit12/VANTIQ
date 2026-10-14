@@ -32,6 +32,10 @@ import {
   saveDrafts,
   scopeOf,
   listPeriodChecks,
+  listScenarios,
+  saveDriver,
+  saveForecastOverride,
+  saveScenarioChanges,
   listSyncRuns,
   runSync,
   getDb,
@@ -873,5 +877,32 @@ describe("Sage Intacct connection", () => {
     expect(checks.find((c) => c.period === "2026-09")?.status).toBe("balanced");
     const [stored] = await withCompany(db, a.companyId, (tx) => tx.execute<{ t: string }>(sql`select account_token_enc as t from connections`));
     expect(stored!.t).not.toContain("vantiq_ws");
+  });
+});
+
+describe("forecast scenarios", () => {
+  it("creates Base, Upside and Downside once, and saves drivers, changes and months set by hand with an audit trail", async () => {
+    const a = await freshCompany("Forecast Co");
+    const first = await listScenarios(db, a.companyId);
+    expect(first.map((s) => [s.name, s.revenueChange, s.costChange])).toEqual([["Base", 0, 0], ["Upside", 0.15, -0.05], ["Downside", -0.25, 0.1]]);
+    expect(await listScenarios(db, a.companyId)).toHaveLength(3);
+    const base = first[0]!;
+
+    await saveDriver(db, a.companyId, a.userId, base.id, "rd-cro", { method: "run_rate", growth: 0.02, amount: null });
+    await saveDriver(db, a.companyId, a.userId, base.id, "ga-software", { method: "flat", growth: 0, amount: 50_000_00 });
+    await saveDriver(db, a.companyId, a.userId, base.id, "ga-software", null);
+    await saveForecastOverride(db, a.companyId, a.userId, base.id, { period: "2026-12", categoryId: "rd-cro", amount: 1_000_000_00, note: "Site close-out" });
+    await saveScenarioChanges(db, a.companyId, a.userId, first[2]!.id, -0.3, 0.1);
+    await expect(saveForecastOverride(db, a.companyId, a.userId, base.id, { period: "2026-12", categoryId: "opex", amount: 1, note: "" })).rejects.toThrow("not a subtotal");
+
+    const after = await listScenarios(db, a.companyId);
+    expect(after[0]!.drivers).toEqual([{ categoryId: "rd-cro", method: "run_rate", growth: 0.02, amount: null }]);
+    expect(after[0]!.overrides).toEqual([{ period: "2026-12", categoryId: "rd-cro", amount: 1_000_000_00, note: "Site close-out" }]);
+    expect(after[2]!.revenueChange).toBe(-0.3);
+    const actions = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'forecast.%' order by at`));
+    expect(actions.map((r) => r.action)).toEqual(["forecast.driver_set", "forecast.driver_set", "forecast.driver_removed", "forecast.month_set", "forecast.scenario_changed"]);
+
+    const other = await freshCompany("Other Co");
+    await expect(saveDriver(db, other.companyId, other.userId, base.id, "rd-cro", null)).rejects.toThrow("does not exist");
   });
 });

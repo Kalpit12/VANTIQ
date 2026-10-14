@@ -75,6 +75,20 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | 12. Email notifications | Email invitations (replacing temporary passwords) and password reset; emails when you're assigned a close task, a task you review is ready to sign off, someone comments on your task, a month is approved, or a synced month goes out of balance; each person chooses which they get; admins see every email sent | Done |
 | 13. Sage Intacct | Direct connection to Sage Intacct with a Web Services user (company ID, user, password, optional entity); reads the chart of accounts, 24 months of GL detail, month-end cash, and Projects or Classes as programs; every month checked against Intacct's own account balances | Done |
 
+### Phase 3
+
+| Milestone | Scope | Status |
+| --- | --- | --- |
+| 14. Forecast and scenarios | Forecast page: 12 months after the books end, every line driven by run rate (with monthly growth), budget or a fixed amount; Base, Upside and Downside scenarios that move revenue and costs; months set by hand for known one-offs; side-by-side comparison with cash at the end; chart C18 (net burn with scenario band); every change in the audit log | Done |
+
+### Milestone 14 decisions
+
+- **Actuals are never touched.** The forecast starts the month after the latest month in the books and reads the ledger only for a starting point. Scenarios hold drivers, two percentages and months set by hand; nothing is copied out of the books.
+- **Defaults without any setup:** costs follow their average over the last 3 months; revenue follows the budget, or its run rate in months with no budget. A driver on a subtotal (say R&D) applies to every line under it that has none of its own; a fixed amount on a subtotal is split by each line's recent share.
+- **Scenarios** start as Base (no change), Upside (revenue +15%, costs −5%) and Downside (revenue −25%, costs +10%). Each has its own drivers and hand-set months, so changing Downside never moves Base. The scenario name is always in the page subtitle and on the chart.
+- **Every forecast number explains itself**: hover a cell to see the average it started from, the growth, the scenario change and any hand-set value.
+- **Cash** rolls forward by net income each month from the last month-end balance in the books, so it assumes bills are paid in the month they're booked. Runway by milestone (the next milestone) will refine this.
+
 ### Milestone 13 decisions
 
 - **Direct, not through Merge.** Vantiq calls Intacct's XML Web Services gateway itself (`packages/integrations/src/connectors/intacct.ts`), like QuickBooks. It needs Vantiq's own Web Services sender credentials in `INTACCT_SENDER_ID` and `INTACCT_SENDER_PASSWORD` (from an Intacct Web Services developer licence), plus `CONNECTION_SECRET_KEY`. Without them the Sage Intacct card says it arrives at launch.

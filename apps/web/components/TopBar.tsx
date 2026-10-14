@@ -22,7 +22,7 @@ export function TopBar({
   const mode = sp.get("mode") === "ytd" ? "ytd" : "month";
   const periods = firstPeriod && latestPeriod ? periodRange(firstPeriod, latestPeriod).reverse() : [];
   // Period controls only apply to the review screens.
-  const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings|connections)/.test(pathname);
+  const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings|connections|forecast)/.test(pathname);
   // A review pack is always one month.
   const showMode = !/^\/(pack|trials|close|income|inventory)/.test(pathname);
 

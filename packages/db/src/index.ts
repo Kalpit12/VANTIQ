@@ -19,3 +19,4 @@ export * from "./shares";
 export * from "./income";
 export * from "./inventory";
 export * from "./notify";
+export * from "./forecast";

@@ -531,6 +531,43 @@ export const inventoryBatches = pgTable(
 );
 
 /**
+ * A forecast scenario (design.md 15): Base, Upside and Downside to start.
+ * Its drivers and the months set by hand are small, edited as a whole, and
+ * always read together, so they live on the row. Actuals are never stored
+ * here; the forecast is worked out from the ledger in @vantiq/domain.
+ */
+export const scenarios = pgTable(
+  "scenarios",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    kind: text("kind").$type<"base" | "upside" | "downside">().notNull(),
+    /** Basis points: 1500 = revenue 15% higher than the drivers give. */
+    revenueChangeBp: integer("revenue_change_bp").notNull().default(0),
+    costChangeBp: integer("cost_change_bp").notNull().default(0),
+    drivers: jsonb("drivers").$type<DriverJson[]>().notNull().default([]),
+    overrides: jsonb("overrides").$type<ForecastOverrideJson[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("scenarios_kind_idx").on(t.companyId, t.kind)],
+);
+
+export interface DriverJson {
+  categoryId: string;
+  method: "run_rate" | "budget" | "flat";
+  growthBp: number;
+  amount: number | null;
+}
+
+export interface ForecastOverrideJson {
+  period: string;
+  categoryId: string;
+  amount: number;
+  note: string;
+}
+
+/**
  * One-time links sent by email: an invitation to set a password and join a
  * company, or a password reset. Only a hash of the token is stored. Outside
  * row-level security, like `sessions`, because the person opening the link
@@ -596,4 +633,5 @@ export const TENANT_TABLES = [
   "comments",
   "income_sources",
   "inventory_batches",
+  "scenarios",
 ] as const;

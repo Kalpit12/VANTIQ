@@ -78,6 +78,13 @@
       "when": 1791982847595,
       "tag": "0010_email_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791986599593,
+      "tag": "0011_scenarios",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,7 @@ export const AUDIT_AREAS = [
   { key: "trial", label: "Trials" },
   { key: "income", label: "Grants and income" },
   { key: "inventory", label: "Inventory" },
+  { key: "forecast", label: "Forecast" },
   { key: "company", label: "Company" },
 ] as const;
 
@@ -110,6 +111,22 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
       ].filter(Boolean);
       return `Changed ${e.target}${changes.length ? `: ${changes.join(", ")}` : ""}`;
     }
+    case "forecast.scenario_changed": {
+      const r = (d.revenue ?? []) as string[];
+      const c = (d.costs ?? []) as string[];
+      const parts = [r[0] !== r[1] && `revenue ${r[0]} to ${r[1]}`, c[0] !== c[1] && `costs ${c[0]} to ${c[1]}`].filter(Boolean);
+      return `Changed the ${e.target} scenario: ${parts.join(", ")}`;
+    }
+    case "forecast.driver_set": {
+      const how = d.method === "flat" ? `a fixed ${money(d.amount)} a month` : d.method === "budget" ? "the budget" : `run rate${Number(d.growthBp) ? `, ${Number(d.growthBp) > 0 ? "+" : ""}${Number(d.growthBp) / 100}% a month` : ""}`;
+      return `Set ${e.target} in ${String(d.scenario ?? "")} to ${how}`;
+    }
+    case "forecast.driver_removed":
+      return `Removed the driver on ${e.target} in ${String(d.scenario ?? "")}`;
+    case "forecast.month_set":
+      return `Set ${e.target} for ${month(String(d.period ?? ""))} in ${String(d.scenario ?? "")} to ${money(d.amount)}${d.note ? `: “${String(d.note)}”` : ""}`;
+    case "forecast.month_cleared":
+      return `Cleared ${e.target} for ${month(String(d.period ?? ""))} in ${String(d.scenario ?? "")}`;
     case "inventory.removed":
       return `Removed ${e.target}`;
     case "inventory.imported":

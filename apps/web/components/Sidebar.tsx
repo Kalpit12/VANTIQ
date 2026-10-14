@@ -9,6 +9,7 @@ type Role = "admin" | "finance" | "viewer";
 const NAV = [
   { href: "/overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { href: "/variances", label: "Variances", icon: "M4 19h16M7 15V9m5 6V5m5 10v-3" },
+  { href: "/forecast", label: "Forecast", icon: "M3 17l5-5 4 4 8-8M15 8h5v5" },
   { href: "/programs", label: "R&D programs", icon: "M9 3h6M10 3v6L5 18a2 2 0 002 3h10a2 2 0 002-3l-5-9V3" },
   { href: "/trials", label: "Trial accruals", icon: "M4 6h10M4 12h16M4 18h7M17 4v4M11 16v4" },
   { href: "/income", label: "Grants and income", icon: "M12 3v18M17 7.5C17 5.6 14.8 4.5 12 4.5S7 5.6 7 7.5s2.2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3" },
