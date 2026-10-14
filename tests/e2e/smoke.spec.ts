@@ -7,6 +7,7 @@ const pages = [
   { path: "/programs", heading: "R&D programs" },
   { path: "/statements", heading: "Statements" },
   { path: "/pack", heading: "Review pack" },
+  { path: "/close", heading: "Close checklist" },
   { path: "/trials", heading: "Trial accruals" },
   { path: "/trials/hx-204-101", heading: "HX-204-101" },
 ];
@@ -103,6 +104,20 @@ test("the review pack downloads as a PDF", async ({ page }) => {
   expect(res.headers()["content-type"]).toBe("application/pdf");
   expect(res.headers()["content-disposition"]).toContain("Helixa-Therapeutics-review-pack-2026-09.pdf");
   expect((await res.body()).subarray(0, 5).toString()).toBe("%PDF-");
+});
+
+test("the demo close checklist shows Helixa's September close part way through", async ({ page }) => {
+  await page.goto("/close");
+  await expect(page.getByText("Sep 2026 close · business day 5", { exact: false })).toBeVisible();
+  await expect(page.locator("#task-ap")).toContainText("Waiting for sign-off");
+  await expect(page.locator("#task-flux")).toContainText("Owner: Dana Ortiz");
+  await expect(page.getByText("Waiting on Dana's review of the HX-204 site start-up credits", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "View as table" }).click();
+  await expect(page.getByRole("row", { name: /Day 3/ })).toBeVisible();
+  // The pack lists the checklist as a check, and shows comments on lines.
+  await page.goto("/pack?period=2026-09");
+  await expect(page.getByText(/close tasks are still open or waiting for sign-off/)).toBeVisible();
+  await expect(page.getByText("Confirmed with Meridian: October invoice will catch up on CO4 visits.")).toBeVisible();
 });
 
 test("trial accruals show the work done against billing, step by step, and export journal entries", async ({ page }) => {

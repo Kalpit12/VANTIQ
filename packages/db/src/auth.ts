@@ -109,6 +109,10 @@ export const can = {
   reopenPack: (r: Role) => r === "admin",
   viewAudit: (r: Role) => r === "admin" || r === "finance",
   manageMembers: (r: Role) => r === "admin",
+  /** Set up the close: assign owners and reviewers, add tasks. A task's owner can always tick it off. */
+  manageClose: (r: Role) => r === "admin" || r === "finance",
+  /** Anyone in the company can comment, including viewers such as department heads. */
+  comment: (_r: Role) => true,
 };
 
 export async function listMembers(db: Db, companyId: string) {

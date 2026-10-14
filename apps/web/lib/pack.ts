@@ -4,6 +4,8 @@ import {
   formatDate,
   formatSignedPct,
   isMaterial,
+  lineAnchor,
+  taskStatus,
   periodLabel,
   rangeLabel,
   UNASSIGNED,
@@ -14,6 +16,7 @@ import {
 } from "@vantiq/domain";
 import { getConnection, getDb, getPack, listPeriodChecks, type ExplanationRow, type PackRecord } from "@vantiq/db";
 import type { Workspace } from "./data";
+import { closeTasksFor, commentsFor, type ShownComment, type ShownTask } from "./closeData";
 import { explanationsFor } from "./explanations";
 import { cashProjection, findingTitle, runwayAt, trendPoints, varianceFor } from "./metrics";
 import { resolveView } from "./view";
@@ -41,13 +44,15 @@ export interface PackData {
     variance: Variance;
     explanation: { text: string; status: ExplanationRow["status"]; by: string | null; source: "claude" | "rules" } | null;
     cited: { date: string; vendor: string; memo: string; amount: number }[];
+    /** Comments on the line; packs approved before milestone 8 have none. */
+    comments?: { by: string | null; at: string; body: string }[];
   }[];
   programs: { label: string; sublabel: string; variance: Variance }[];
   opexTrend: { period: Period; label: string; actual: number; budget: number }[];
   cash: { balance: number; avgBurn: number; runwayMonths: number | null; zeroText: string | null; trend: { period: Period; label: string; value: number }[] } | null;
 }
 
-export function buildPack(ledger: Ledger, companyName: string, period: Period, expl: Map<string, ExplanationRow>): PackData {
+export function buildPack(ledger: Ledger, companyName: string, period: Period, expl: Map<string, ExplanationRow>, comments: ShownComment[] = []): PackData {
   const view = resolveView({ period }, ledger);
   const ytd = ytdPeriods(view.period).filter((p) => p >= ledger.firstPeriod());
   const month = [view.period];
@@ -89,6 +94,7 @@ export function buildPack(ledger: Ledger, companyName: string, period: Period, e
           .map((id) => byId.get(id))
           .filter((t) => t !== undefined)
           .map((t) => ({ date: t.date, vendor: (t.vendorId && vendors.get(t.vendorId)) || "", memo: t.memo, amount: t.amount })),
+        comments: comments.filter((c) => c.anchor === lineAnchor(l.id)).map((c) => ({ by: c.authorName, at: c.at, body: c.body })),
       };
     });
 
@@ -162,7 +168,7 @@ export function changedSince(snapshot: PackData, live: PackData) {
 }
 
 export interface Readiness {
-  key: "reconciled" | "mapped" | "explained";
+  key: "reconciled" | "mapped" | "explained" | "checklist";
   ok: boolean;
   title: string;
   detail: string;
@@ -172,7 +178,7 @@ export interface Readiness {
 /** What must be true before a month can be approved. All of them block. */
 export function readiness(
   pack: PackData,
-  opts: { check: "balanced" | "out_of_balance" | "unavailable" | null; unmappedTxns: number },
+  opts: { check: "balanced" | "out_of_balance" | "unavailable" | null; unmappedTxns: number; closeOutstanding: number },
 ): Readiness[] {
   const pending = pack.material.filter((m) => !m.explanation || m.explanation.status === "ai_draft");
   return [
@@ -209,6 +215,13 @@ export function readiness(
             : `${pending.length} of ${pack.material.length} material lines still need an accepted or edited explanation.`,
       href: pending.length ? `/variances?period=${pack.period}` : undefined,
     },
+    {
+      key: "checklist",
+      ok: opts.closeOutstanding === 0,
+      title: "Close checklist is done",
+      detail: opts.closeOutstanding === 0 ? "Every close task is ticked off and signed off." : `${opts.closeOutstanding} close task${opts.closeOutstanding === 1 ? " is" : "s are"} still open or waiting for sign-off.`,
+      href: opts.closeOutstanding ? `/close?period=${pack.period}` : undefined,
+    },
   ];
 }
 
@@ -223,11 +236,15 @@ export interface PackState {
   checks: Readiness[];
 }
 
+/** Manual close tasks not yet done. Automatic ones mirror the other checks, so they aren't counted twice. */
+const outstanding = (tasks: ShownTask[]) => tasks.filter((t) => !t.auto && taskStatus(t, {}) !== "done").length;
+
 export async function packState(ws: Workspace, period: Period): Promise<PackState> {
-  const expl = await explanationsFor(ws, [period]);
-  const live = buildPack(ws.ledger, ws.companyName, period, expl);
+  const p = resolveView({ period }, ws.ledger).period;
+  const [expl, comments, tasks] = await Promise.all([explanationsFor(ws, [p]), commentsFor(ws, p), closeTasksFor(ws, p)]);
+  const live = buildPack(ws.ledger, ws.companyName, p, expl, comments);
   if (ws.mode === "demo") {
-    return { shown: live, live, record: null, locked: false, changes: [], checks: readiness(live, { check: null, unmappedTxns: 0 }) };
+    return { shown: live, live, record: null, locked: false, changes: [], checks: readiness(live, { check: null, unmappedTxns: 0, closeOutstanding: outstanding(tasks) }) };
   }
   const db = getDb();
   const [rec, conn, checks] = await Promise.all([getPack<PackData>(db, ws.companyId!, live.period), getConnection(db, ws.companyId!), listPeriodChecks(db, ws.companyId!)]);
@@ -240,7 +257,7 @@ export async function packState(ws: Workspace, period: Period): Promise<PackStat
     record: rec ? (record as PackState["record"]) : null,
     locked,
     changes: locked ? changedSince(snapshot!, live) : [],
-    checks: readiness(live, { check, unmappedTxns: ws.unmapped.transactions }),
+    checks: readiness(live, { check, unmappedTxns: ws.unmapped.transactions, closeOutstanding: outstanding(tasks) }),
   };
 }
 

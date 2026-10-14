@@ -282,8 +282,8 @@ Scope:
 
 Test gate:
 - [x] Accrual engine unit tests against hand-calculated cases, including change orders and late CRO reports.
-- [ ] Locking tests: post-close changes never alter an approved pack.
-- [ ] Comment anchoring survives re-sync.
+- [x] Locking tests: post-close changes never alter an approved pack.
+- [x] Comment anchoring survives re-sync.
 - [ ] Permission tests for department owner scopes.
 - [ ] e2e: full monthly close from sync to CFO approval to board pack share.
 - [ ] SOC 2 Type I readiness controls in place.

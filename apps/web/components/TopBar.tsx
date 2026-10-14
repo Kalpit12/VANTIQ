@@ -24,7 +24,7 @@ export function TopBar({
   // Period controls only apply to the review screens.
   const showPeriod = periods.length > 0 && !/^\/(import|mappings|settings|connections)/.test(pathname);
   // A review pack is always one month.
-  const showMode = !/^\/(pack|trials)/.test(pathname);
+  const showMode = !/^\/(pack|trials|close)/.test(pathname);
 
   const go = (changes: Record<string, string>) => {
     const q = new URLSearchParams(sp.toString());
@@ -71,7 +71,7 @@ export function TopBar({
           ))}
         </div>
         )}
-        {!pathname.startsWith("/trials") && <span className="text-[13px] text-ink-3">vs Budget</span>}
+        {!/^\/(trials|close)/.test(pathname) && <span className="text-[13px] text-ink-3">vs Budget</span>}
       </div>
       )}
       <div className="ml-auto flex items-center gap-3">

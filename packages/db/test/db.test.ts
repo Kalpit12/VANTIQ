@@ -52,6 +52,14 @@ import {
   listTrials,
   saveActivity,
   TrialError,
+  addCloseTask,
+  addComment,
+  assignCloseTask,
+  CloseError,
+  listCloseTasks,
+  listComments,
+  prepareCloseTask,
+  reviewCloseTask,
   type Db,
 } from "../src";
 
@@ -445,6 +453,108 @@ describe("clinical trials", () => {
       const expected = estimateAccrual(t.contract, t.activity, billedForTrial(fixture, t), "2026-09");
       expect(mine.accrual).toBe(expected.accrual);
     }
+  });
+});
+
+describe("close checklist", () => {
+  it("assigns owners and reviewers, and keeps preparing and signing off apart", async () => {
+    const a = await freshCompany("Close Co");
+    const admin = { userId: a.userId, role: "admin" as const };
+    const add = async (name: string, role: "finance" | "viewer") => {
+      const email = `${name.toLowerCase()}-${a.email}`;
+      const { tempPassword } = await addMember(db, a.userId, a.companyId, { name, email, role });
+      const s = (await getSession(db, (await signIn(db, email, tempPassword!)).token))!;
+      return { userId: s.user.id, role };
+    };
+    const fin = await add("Farah", "finance");
+    const head = await add("Hugo", "viewer"); // a department head with read-only access
+
+    const tasks = await listCloseTasks(db, a.companyId, "2026-09");
+    expect(tasks.map((t) => t.key).slice(0, 4)).toEqual(["synced", "bank", "mapped", "reconciled"]);
+    expect(tasks.every((t) => !t.preparedAt)).toBe(true);
+    expect((await listCloseTasks(db, a.companyId, "2026-09")).length).toBe(tasks.length); // created once
+
+    // Only admins and finance assign; the reviewer must be someone else; assignees must be members.
+    await expect(assignCloseTask(db, a.companyId, head, "2026-09", "flux", { ownerId: head.userId, reviewerId: null })).rejects.toThrow(CloseError);
+    await expect(assignCloseTask(db, a.companyId, admin, "2026-09", "flux", { ownerId: fin.userId, reviewerId: fin.userId })).rejects.toThrow(/someone other/);
+    const outsider = await freshCompany("Outside Co");
+    await expect(assignCloseTask(db, a.companyId, admin, "2026-09", "flux", { ownerId: outsider.userId, reviewerId: null })).rejects.toThrow(/in this company/);
+    await assignCloseTask(db, a.companyId, fin, "2026-09", "flux", { ownerId: head.userId, reviewerId: fin.userId });
+    await assignCloseTask(db, a.companyId, admin, "2026-09", "bank", { ownerId: fin.userId, reviewerId: a.userId });
+
+    // A viewer can tick off a task they own, and nothing else.
+    await expect(prepareCloseTask(db, a.companyId, head, "2026-09", "bank", true)).rejects.toThrow(/owner/);
+    await prepareCloseTask(db, a.companyId, head, "2026-09", "flux", true);
+    // Automatic tasks can't be ticked by hand.
+    await expect(prepareCloseTask(db, a.companyId, admin, "2026-09", "mapped", true)).rejects.toThrow(/itself/);
+
+    // Sign-off: only the reviewer (or an admin), only once prepared, never by the preparer.
+    await expect(reviewCloseTask(db, a.companyId, head, "2026-09", "flux")).rejects.toThrow(/reviewer/);
+    await expect(reviewCloseTask(db, a.companyId, admin, "2026-09", "bank")).rejects.toThrow(/ticked/);
+    await expect(prepareCloseTask(db, a.companyId, admin, "2026-09", "bank", true)).rejects.toThrow(/reviewer/);
+    await prepareCloseTask(db, a.companyId, fin, "2026-09", "bank", true);
+    await reviewCloseTask(db, a.companyId, admin, "2026-09", "bank");
+    await reviewCloseTask(db, a.companyId, fin, "2026-09", "flux");
+    const after = await listCloseTasks(db, a.companyId, "2026-09");
+    expect(after.find((t) => t.key === "flux")).toMatchObject({ ownerName: "Hugo", reviewerName: "Farah", preparedByName: "Hugo", reviewedByName: "Farah" });
+    expect(after.find((t) => t.key === "bank")).toMatchObject({ preparedByName: "Farah", reviewedByName: "Close Co CFO" });
+
+    // Un-ticking clears the sign-off.
+    await prepareCloseTask(db, a.companyId, fin, "2026-09", "bank", false);
+    expect((await listCloseTasks(db, a.companyId, "2026-09")).find((t) => t.key === "bank")).toMatchObject({ preparedAt: null, reviewedAt: null });
+
+    // The team's own task, and owners, carry forward to the next month; ticks don't.
+    await expect(addCloseTask(db, a.companyId, head, "2026-09", { title: "Nope", section: "books", dueDay: 2 })).rejects.toThrow(CloseError);
+    const key = await addCloseTask(db, a.companyId, fin, "2026-09", { title: "Reconcile grant receivable", section: "books", dueDay: 4 });
+    const oct = await listCloseTasks(db, a.companyId, "2026-10");
+    expect(oct.find((t) => t.key === key)).toMatchObject({ title: "Reconcile grant receivable", custom: true, dueDay: 4 });
+    expect(oct.find((t) => t.key === "flux")).toMatchObject({ ownerId: head.userId, reviewerId: fin.userId, preparedAt: null, reviewedAt: null });
+
+    const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'close.%'`));
+    expect(new Set(audit.map((r) => r.action))).toEqual(new Set(["close.assigned", "close.prepared", "close.reviewed", "close.reopened", "close.task_added"]));
+    // Another company sees none of it.
+    expect((await listCloseTasks(db, outsider.companyId, "2026-09")).every((t) => !t.ownerId)).toBe(true);
+  });
+
+  it("an approved month refuses checklist changes and comments until reopened", async () => {
+    const a = await freshCompany("Locked Close Co");
+    const admin = { userId: a.userId, role: "admin" as const };
+    await addComment(db, a.companyId, a.userId, "2026-09", "task:bank", "Statement requested from the bank.");
+    await approvePack(db, a.companyId, a.userId, "2026-09", { ok: true });
+    await expect(prepareCloseTask(db, a.companyId, admin, "2026-09", "bank", true)).rejects.toThrow(/locked/);
+    await expect(assignCloseTask(db, a.companyId, admin, "2026-09", "bank", { ownerId: a.userId, reviewerId: null })).rejects.toThrow(/locked/);
+    await expect(addCloseTask(db, a.companyId, admin, "2026-09", { title: "Late task", section: "books", dueDay: 2 })).rejects.toThrow(/locked/);
+    await expect(addComment(db, a.companyId, a.userId, "2026-09", "task:bank", "Too late")).rejects.toThrow(/locked/);
+    await reopenPack(db, a.companyId, a.userId, "2026-09", "Bank statement arrived");
+    await addComment(db, a.companyId, a.userId, "2026-09", "task:bank", "Reconciled.");
+    expect((await listComments(db, a.companyId, "2026-09")).map((c) => c.body)).toEqual(["Statement requested from the bank.", "Reconciled."]);
+    await expect(addComment(db, a.companyId, a.userId, "2026-09", "row:123", "x")).rejects.toThrow(/line or a task/);
+  });
+
+  it("comments stay on their line through a re-sync, and post-close changes never alter the approved pack", async () => {
+    process.env.CONNECTION_SECRET_KEY ??= "test-secret-key-for-connection-tokens";
+    const TODAY = "2026-09-30";
+    const a = await freshCompany("Resync Co");
+    await createConnection(db, a.companyId, a.userId, { provider: "sandbox", systemName: "QuickBooks Online (sandbox)" });
+    await runSync(db, a.companyId, { trigger: "initial", actorId: a.userId, today: TODAY });
+    await addComment(db, a.companyId, a.userId, "2026-09", "line:rd-cro", "Meridian change order 4 started in July.");
+    const cro = (l: Ledger) => l.actual({ periods: ["2026-09"], categoryIds: ["rd-cro"] });
+    const before = cro(new Ledger((await loadLedger(db, a.companyId)).data));
+    await approvePack(db, a.companyId, a.userId, "2026-09", { cro: before });
+
+    // The source edits a September CRO invoice and deletes another after approval.
+    const data = generateSampleCompany();
+    const sept = data.transactions.filter((t) => t.date.startsWith("2026-09") && t.categoryId === "rd-cro");
+    const edited = {
+      ...data,
+      transactions: data.transactions.filter((t) => t.id !== sept[1]!.id).map((t) => (t.id === sept[0]!.id ? { ...t, amount: t.amount + 50_000_00 } : t)),
+    };
+    const res = await runSync(db, a.companyId, { trigger: "manual", today: TODAY, connector: sandboxConnector({ data: edited }) });
+    expect(res).toMatchObject({ updated: 1, deleted: 1 });
+    expect(cro(new Ledger((await loadLedger(db, a.companyId)).data))).not.toBe(before);
+
+    expect(await getPack<{ cro: number }>(db, a.companyId, "2026-09")).toMatchObject({ status: "approved", snapshot: { cro: before } });
+    expect(await listComments(db, a.companyId, "2026-09")).toMatchObject([{ anchor: "line:rd-cro", body: "Meridian change order 4 started in July.", authorName: "Resync Co CFO" }]);
   });
 });
 
