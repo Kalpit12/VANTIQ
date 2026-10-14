@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { billedForTrial, CLOSE_TEMPLATE, estimateAccrual, Ledger, receivedFor, scheduleStatus, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
-import { generateSampleClose, generateSampleCompany, generateSampleIncome, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
+import { billedForTrial, CLOSE_TEMPLATE, expiryBuckets, estimateAccrual, Ledger, receivedFor, scheduleStatus, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
+import { generateSampleClose, generateSampleCompany, generateSampleIncome, generateSampleInventory, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
 
 describe("sample company", () => {
   const data = generateSampleCompany();
@@ -81,5 +81,18 @@ describe("sample income", () => {
     expect(nih!.filter((r) => r.status === "received").every((r) => r.monthsLate === 0)).toBe(true);
     expect(novagen!.find((r) => r.id === "nov-2")).toMatchObject({ status: "received", monthsLate: 2 });
     expect(kairo!.find((r) => r.id === "kai-1")).toMatchObject({ status: "overdue" });
+  });
+});
+
+describe("sample inventory", () => {
+  it("has one expired lot, one the trial can't use up, and a write-off from each basis", () => {
+    const { rows, summary } = expiryBuckets(generateSampleInventory(), "2026-09");
+    expect(summary.total).toBe(1_011_700_00);
+    expect(summary.writeOff).toBe(193_975_00);
+    expect(rows.find((r) => r.batch.lot === "DP-2311")).toMatchObject({ bucket: "expired", basis: "expired" });
+    expect(rows.find((r) => r.batch.lot === "DP-2402")).toMatchObject({ bucket: "0-3", basis: "usage", unusedUnits: 420 });
+    expect(rows.find((r) => r.batch.lot === "DP-2405")).toMatchObject({ bucket: "6-12", usedFromEarlierLots: 480, usedBeforeExpiry: 1440, writeOff: 64_800_00 });
+    expect(rows.find((r) => r.batch.lot === "RS-118")).toMatchObject({ basis: "policy", writeOff: 15_000_00 });
+    expect(summary.byProduct[0]).toMatchObject({ product: "HX-204 drug product 50 mg", atRisk: 511_200_00 });
   });
 });

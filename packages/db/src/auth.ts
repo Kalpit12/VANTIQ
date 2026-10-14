@@ -117,6 +117,8 @@ export const can = {
   sharePack: (r: Role) => r === "admin" || r === "finance",
   /** Set up grant, milestone and licensing schedules. */
   manageIncome: (r: Role) => r === "admin" || r === "finance",
+  /** Add, change and import inventory batches. */
+  manageInventory: (r: Role) => r === "admin" || r === "finance",
 };
 
 export async function listMembers(db: Db, companyId: string) {

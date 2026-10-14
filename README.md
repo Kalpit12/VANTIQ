@@ -68,9 +68,18 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | 7. Trial accruals | Trials with CRO contracts priced by driver (monthly fee, sites, patients, visits), change orders, monthly CRO activity (entered or imported), accrual worked out step by step, month-end journal entry CSV; charts C11 (contract vs work done vs billed), C12 (trial timeline), C13 (accrual by CRO) | Done |
-| 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C15 (close calendar); the pack can't be approved until the checklist is done | Done |
+| 8. Close checklist | Standard month-end checklist plus the team's own tasks, owners and reviewers, tick-off and sign-off, comments on tasks and variance lines, chart C16 (close calendar); the pack can't be approved until the checklist is done | Done |
 | 9. Board pack sharing | Board pack (board-ready subset of the approved review pack) as a page and PDF, read-only links for the board that expire, revoke, open counts, audit | Done |
-| 10. Grants and income | Schedules for grants, partner milestones and licensing with expected receipts and likelihood, matched to income in the books; received, overdue, risk-weighted next 12 months, grant left to draw; chart C14 (receipts timeline) | Done |
+| 10. Grants and income | Schedules for grants, partner milestones and licensing with expected receipts and likelihood, matched to income in the books; received, overdue, risk-weighted next 12 months, grant left to draw; chart C15 (receipts timeline) | Done |
+| 11. Inventory and expiry | Lots with product, quantity, unit cost and expiry, entered or imported; grouped by expiry (expired, 0–3, 3–6, 6–12 months, later); suggested write-off per lot with the reason; month-end reserve journal entry CSV; chart C14 (expiry exposure by product) | Done |
+
+### Milestone 11 decisions
+
+- **Buckets go by calendar month** from the end of the month being viewed: a lot expiring on 31 December is in "0–3 months" at the September close, one expiring on 1 January is in "3–6 months". A lot that expired on or before month end is "Expired".
+- **Suggested write-off**: an expired lot is written off in full. With a monthly usage rate, the write-off is the units still left at expiry. Lots of the same product are used first-expiry-first-out, so a later lot only starts being used once earlier lots run out. Without a usage rate, the write-off is 50% of the value for stock expiring within 3 months and 25% within 6.
+- **The reserve entry** debits 6320 Inventory write-off (expiry) and credits 1320 Inventory reserve for expiry on the last day of the month, tagged with the program, and reverses on the first day of the next. The reserve always equals this month's suggestion, the same way as trial accruals. Each download is audited.
+- **Expiry uses the warning color, never red**, strongest for expired stock and fading as expiry gets further away.
+- **Imports** read product, lot, quantity, unit cost and expiry date (ISO, US M/D/YYYY or "31 Jan 2027"), plus unit, monthly usage, program and location when present. A product and lot already on file is replaced, and skipped rows are listed.
 
 ### Milestone 10 decisions
 

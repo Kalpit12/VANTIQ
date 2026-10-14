@@ -1,4 +1,4 @@
-import { billedForTrial, estimateAccrual, Ledger, periodRange, receivedFor, scheduleStatus } from "@vantiq/domain";
+import { billedForTrial, estimateAccrual, expiryBuckets, Ledger, periodRange, receivedFor, scheduleStatus } from "@vantiq/domain";
 import { generateSampleCompany, generateSampleTrials, sampleFiles } from "@vantiq/fixtures";
 import { guessColumns, parseCsv, sandboxConnector } from "@vantiq/integrations";
 import { eq, sql } from "drizzle-orm";
@@ -67,6 +67,11 @@ import {
   ShareError,
   shareLinks,
   createIncomeSource,
+  importBatches,
+  InventoryError,
+  listBatches,
+  removeBatch,
+  saveBatch,
   IncomeError,
   listIncomeSources,
   saveReceipt,
@@ -645,6 +650,59 @@ describe("income schedules", () => {
     const ledger = (await loadLedger(db, a.companyId)).data;
     const nih = scheduleStatus(sources[0]!, receivedFor(ledger, sources[0]!), "2026-09");
     expect(nih.filter((r) => r.status === "received")).toHaveLength(8);
+  });
+});
+
+describe("inventory batches", () => {
+  const input = { product: "Drug product 10 mg", programCode: "HX-9", lot: "L-1", quantity: 100, unit: "vials", unitCost: 50_00, expiry: "2026-12-31", monthlyUsage: 20, location: "Depot" };
+
+  it("adds, changes and removes batches with an audit trail", async () => {
+    const a = await freshCompany("Stock Co");
+    await saveBatch(db, a.companyId, a.userId, null, input);
+    await saveBatch(db, a.companyId, a.userId, null, { ...input, lot: "L-2", expiry: "2027-03-31", monthlyUsage: null });
+    await expect(saveBatch(db, a.companyId, a.userId, null, { ...input, expiry: "2026-02-30" })).rejects.toThrow(/expiry date/);
+    await expect(saveBatch(db, a.companyId, a.userId, null, { ...input, quantity: 1.5 })).rejects.toThrow(InventoryError);
+    let list = await listBatches(db, a.companyId);
+    expect(list.map((b) => b.lot)).toEqual(["L-1", "L-2"]);
+    await expect(saveBatch(db, a.companyId, a.userId, list[1]!.id, { ...input })).rejects.toThrow(/already a batch/);
+    await saveBatch(db, a.companyId, a.userId, list[0]!.id, { ...input, quantity: 60 });
+    await removeBatch(db, a.companyId, a.userId, list[1]!.id);
+    list = await listBatches(db, a.companyId);
+    expect(list).toEqual([{ ...input, id: list[0]!.id, quantity: 60 }]);
+    const audit = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'inventory.%' order by at`));
+    expect(audit.map((r) => r.action)).toEqual(["inventory.added", "inventory.added", "inventory.updated", "inventory.removed"]);
+    expect(await listBatches(db, (await freshCompany("Other Stock Co")).companyId)).toEqual([]);
+  });
+
+  it("imports an inventory listing, replacing lots already on file and listing the rows it skipped", async () => {
+    const a = await freshCompany("Import Stock Co");
+    await saveBatch(db, a.companyId, a.userId, null, input);
+    const table = parseCsv(
+      [
+        "Product,Lot number,Qty,Unit cost,Expiration date,UOM,Monthly usage,Location",
+        "Drug product 10 mg,L-1,80,$50.00,2026-12-31,vials,20,Depot",
+        'Reference standard,RS-1,5,"1,200",3/31/2027,vials,,Lab',
+        "Media,M-1,10,12,31 Jan 2027,bottles,,Lab",
+        "Media,M-2,10,12,someday,bottles,,Lab",
+        "Media,M-3,-4,12,2027-01-31,bottles,,Lab",
+      ].join("\n"),
+    );
+    const res = await importBatches(db, a.companyId, a.userId, table);
+    expect(res).toEqual({ added: 2, updated: 1, errors: ['Row 5: "someday" is not a date.', "Row 6: quantity must be a whole number of zero or more."] });
+    const list = await listBatches(db, a.companyId);
+    expect(list.map((b) => [b.lot, b.quantity, b.unitCost, b.expiry, b.monthlyUsage])).toEqual([
+      ["L-1", 80, 50_00, "2026-12-31", 20],
+      ["M-1", 10, 12_00, "2027-01-31", null],
+      ["RS-1", 5, 1_200_00, "2027-03-31", null],
+    ]);
+    await expect(importBatches(db, a.companyId, a.userId, parseCsv("Product,Lot\nX,1"))).rejects.toThrow(/Missing: quantity, unit cost, expiry/);
+  });
+
+  it("loads the sample stock with the sample books", async () => {
+    const a = await freshCompany("Sample Stock Co");
+    await loadSampleData(db, a.companyId, a.userId);
+    const { summary } = expiryBuckets(await listBatches(db, a.companyId), "2026-09");
+    expect(summary.writeOff).toBe(193_975_00);
   });
 });
 

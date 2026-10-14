@@ -12,6 +12,7 @@ const pages = [
   { path: "/trials", heading: "Trial accruals" },
   { path: "/trials/hx-204-101", heading: "HX-204-101" },
   { path: "/income", heading: "Grants and income" },
+  { path: "/inventory", heading: "Inventory and expiry" },
 ];
 
 for (const p of pages) {
@@ -166,4 +167,18 @@ test("grants and partner income show what arrived, what is late and what to expe
   await page.goto("/income?period=2026-07");
   await expect(page.getByText("Signing fee, due Aug 2026")).toHaveCount(0);
   await expect(page.getByText("Novagen collaboration (HX-204): First patient dosed, due Jun 2026")).toBeVisible();
+});
+
+test("inventory groups stock by expiry, explains each write-off and exports the reserve entry", async ({ page }) => {
+  await page.goto("/inventory?period=2026-09");
+  await expect(page.getByRole("heading", { name: "Expires in 0–3 months" })).toBeVisible();
+  await expect(page.getByText("$194k", { exact: true })).toBeVisible();
+  await expect(page.getByText("At 160 vials a month and 480 used from earlier lots first, 1,440 get used before expiry and 360 are left over")).toBeVisible();
+  await expect(page.getByText("Expired 15 Sep 2026: write off all 140 vials")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add batch" })).toHaveCount(0);
+  const csv = await page.request.get("/inventory/journal?period=2026-09");
+  expect(csv.ok()).toBe(true);
+  const lines = (await csv.text()).trim().split("\r\n");
+  expect(lines).toHaveLength(1 + 6 * 2);
+  expect(lines[1]).toBe("EXP-202609,2026-09-30,6320,Inventory write-off (expiry),25200.00,,\"Expiry reserve HX-204 drug product 50 mg lot DP-2311 2026-09, reverses 2026-10-01\",HX-204");
 });

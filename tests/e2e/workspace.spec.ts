@@ -437,3 +437,36 @@ test("income schedules: move a late licensing fee, add a grant, and see it in th
   await expect(page.getByText("Changed Signing fee on Kairo license (HX-310): moved from Aug 2026 to Nov 2026, likelihood 80% to 70%")).toBeVisible();
   await expect(page.getByText("Added Tranche 1 to CPRIT product development award: $1.0M expected Dec 2026 at 90%")).toBeVisible();
 });
+
+test("inventory: write off an expired lot, change a quantity, import a listing, and see it in the audit log", async ({ page }) => {
+  await signUp(page, "Stock Bio");
+  await page.getByRole("button", { name: "Try it with sample data" }).click();
+  await expect(page.getByText("$59.6M", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("link", { name: "Inventory and expiry" }).click();
+  await expect(page.getByText("1 lot still on the books")).toBeVisible();
+
+  // The expired lot was destroyed.
+  const expired = page.locator("tr", { hasText: "DP-2311" });
+  await expired.getByText("Change").click();
+  await expired.getByRole("button", { name: "Remove lot DP-2311" }).click();
+  await expect(page.getByText("Nothing past its expiry date")).toBeVisible();
+
+  // A stock count found fewer reference standard vials.
+  const rs = page.locator("tr", { hasText: "RS-118" });
+  await rs.getByText("Change").click();
+  await rs.getByRole("form", { name: "Change lot RS-118" }).getByLabel("Quantity").fill("10");
+  await rs.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator("tr", { hasText: "RS-118" }).getByRole("cell", { name: "$6k", exact: true })).toBeVisible();
+
+  const csv = "Product,Lot,Qty,Unit cost,Expiry date,Unit,Monthly usage\nAssay kits,AK-77,40,250,2026-11-30,kits,10\nAssay kits,AK-78,40,250,soon,kits,10\n";
+  await page.getByLabel("Inventory file").setInputFiles({ name: "stock.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Import lots" }).click();
+  await expect(page.getByText('Added 1 lot and updated 0. Skipped 1: Row 3: "soon" is not a date.')).toBeVisible();
+  await expect(page.getByText("At 10 kits a month, 20 get used before expiry and 20 are left over")).toBeVisible();
+
+  await page.goto("/settings/audit?area=inventory");
+  await expect(page.getByText("Removed HX-204 drug product 50 mg DP-2311")).toBeVisible();
+  await expect(page.getByText("Changed Reference standard HX-101 RS-118: quantity 25 to 10")).toBeVisible();
+  await expect(page.getByText("Imported inventory: 1 lot added, 0 updated, 1 row skipped")).toBeVisible();
+});
