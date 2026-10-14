@@ -10,6 +10,7 @@ const scope = (s: string, names: Map<string, string>) => {
 };
 
 const money = (v: unknown) => formatCompactCurrency(Number(v ?? 0));
+const plural = (v: unknown, word: string) => `${Number(v ?? 0)} ${word}${Number(v ?? 0) === 1 ? "" : "s"}`;
 const likely = (v: unknown) => `${Math.round(Number(v ?? 0) * 100)}%`;
 
 /** Close task targets are stored as "2026-09 Task title". */
@@ -28,6 +29,7 @@ export const AUDIT_AREAS = [
   { key: "member", label: "Members" },
   { key: "trial", label: "Trials" },
   { key: "income", label: "Grants and income" },
+  { key: "inventory", label: "Inventory" },
   { key: "company", label: "Company" },
 ] as const;
 
@@ -97,6 +99,23 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
     }
     case "income.receipt_removed":
       return `Removed ${String(d.label ?? "a receipt")} from ${e.target}`;
+    case "inventory.added":
+      return `Added ${e.target}: ${Number(d.quantity ?? 0).toLocaleString("en-US")} ${String(d.unit ?? "")}, expiring ${String(d.expiry ?? "")}`;
+    case "inventory.updated": {
+      const b = (d.before ?? {}) as Record<string, unknown>;
+      const changes = [
+        b.quantity !== d.quantity && `quantity ${Number(b.quantity ?? 0).toLocaleString("en-US")} to ${Number(d.quantity ?? 0).toLocaleString("en-US")}`,
+        b.expiry !== d.expiry && `expiry ${String(b.expiry ?? "")} to ${String(d.expiry ?? "")}`,
+        b.monthlyUsage !== d.monthlyUsage && `usage ${b.monthlyUsage ?? "none"} to ${d.monthlyUsage ?? "none"} a month`,
+      ].filter(Boolean);
+      return `Changed ${e.target}${changes.length ? `: ${changes.join(", ")}` : ""}`;
+    }
+    case "inventory.removed":
+      return `Removed ${e.target}`;
+    case "inventory.imported":
+      return `Imported inventory: ${plural(d.added, "lot")} added, ${Number(d.updated ?? 0)} updated${Number(d.skipped ?? 0) ? `, ${plural(d.skipped, "row")} skipped` : ""}`;
+    case "inventory.journal_exported":
+      return `Downloaded the ${month(e.target)} expiry reserve entry (${money(d.writeOff)})`;
     case "close.assigned":
       return `Assigned ${taskName(e.target)} (${month(String(d.period ?? ""))})`;
     case "close.prepared":

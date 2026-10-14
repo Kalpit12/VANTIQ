@@ -7,7 +7,7 @@ const niceStep = (max: number) => {
 };
 
 /**
- * Chart C14: income by month. Money already received is a solid bar; money
+ * Chart C15: income by month. Money already received is a solid bar; money
  * still expected is drawn at its full amount, shaded by how likely it is
  * (a 90% milestone is nearly solid, a 20% one barely there), stacked when
  * several fall in one month. Receipts past their month and not yet in the

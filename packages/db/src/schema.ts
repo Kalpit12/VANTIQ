@@ -503,6 +503,31 @@ export interface ExpectedReceiptJson {
   probability: number;
 }
 
+/**
+ * One lot of a product on hand (design.md 10): clinical supply, drug
+ * substance, reference materials. A lot is identified by product and lot
+ * number; the expiry watchlist and suggested write-offs are worked out from
+ * these rows in @vantiq/domain.
+ */
+export const inventoryBatches = pgTable(
+  "inventory_batches",
+  {
+    id: id(),
+    companyId: companyId(),
+    product: text("product").notNull(),
+    programCode: text("program_code"),
+    lot: text("lot").notNull(),
+    quantity: integer("quantity").notNull(),
+    unit: text("unit").notNull().default("units"),
+    unitCost: bigint("unit_cost", { mode: "number" }).notNull(),
+    expiry: date("expiry", { mode: "string" }).notNull(),
+    monthlyUsage: integer("monthly_usage"),
+    location: text("location").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("inventory_batches_lot_idx").on(t.companyId, t.product, t.lot)],
+);
+
 /** Tables guarded by row-level security. Kept here so tests can check every one. */
 export const TENANT_TABLES = [
   "source_accounts",
@@ -525,4 +550,5 @@ export const TENANT_TABLES = [
   "close_tasks",
   "comments",
   "income_sources",
+  "inventory_batches",
 ] as const;

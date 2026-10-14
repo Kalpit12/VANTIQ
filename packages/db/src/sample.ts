@@ -6,6 +6,7 @@ import { commitImport, createDraft } from "./imports";
 import { programs } from "./schema";
 import { withCompany } from "./tenant";
 import { loadSampleIncome } from "./income";
+import { loadSampleInventory } from "./inventory";
 import { loadSampleTrials } from "./trials";
 
 /**
@@ -33,6 +34,7 @@ export async function loadSampleData(db: Db, companyId: string, userId: string) 
   }
   await loadSampleTrials(db, companyId, userId);
   await loadSampleIncome(db, companyId, userId);
+  await loadSampleInventory(db, companyId);
 }
 
 /** Just the sample budget, for a company whose actuals come from the sandbox connection. */
@@ -42,4 +44,5 @@ export async function loadSampleBudget(db: Db, companyId: string, userId: string
   await commitImport(db, companyId, userId, id, guessColumns(table.headers, "budget"));
   await loadSampleTrials(db, companyId, userId);
   await loadSampleIncome(db, companyId, userId);
+  await loadSampleInventory(db, companyId);
 }

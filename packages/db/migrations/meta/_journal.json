@@ -64,6 +64,13 @@
       "when": 1791976479582,
       "tag": "0008_income_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791981389576,
+      "tag": "0009_inventory_batches",
+      "breakpoints": true
     }
   ]
 }

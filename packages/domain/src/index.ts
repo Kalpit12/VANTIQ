@@ -8,3 +8,4 @@ export * from "./chart";
 export * from "./accruals";
 export * from "./close";
 export * from "./income";
+export * from "./inventory";

@@ -18,7 +18,7 @@ export const CALENDAR_LEGEND = [
 ];
 
 /**
- * C15 close progress: the close calendar, one column per business day with
+ * C16 close progress: the close calendar, one column per business day with
  * the tasks due that day, colored by where they stand, and today marked.
  */
 export function CloseCalendar({ days, tasks, today }: { days: { day: number; date: string }[]; tasks: CalendarTask[]; today: number }) {
