@@ -80,6 +80,17 @@ Phase 1 is built in milestones. Each milestone ends with its tests passing.
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | 14. Forecast and scenarios | Forecast page: 12 months after the books end, every line driven by run rate (with monthly growth), budget or a fixed amount; Base, Upside and Downside scenarios that move revenue and costs; months set by hand for known one-offs; side-by-side comparison with cash at the end; chart C18 (net burn with scenario band); every change in the audit log | Done |
+| 15. Multi-entity consolidation | Subsidiaries under one company, each with its own currency; monthly average and closing rates, typed or pasted from a spreadsheet; intercompany account pairs eliminated every month, with differences flagged; an entity column in ledger, budget and cash imports; an entity switcher on Overview, Variances, R&D programs and Statements; Entities page with the consolidation table and chart C20 (spend by entity as small multiples); consolidation tests against reference workbooks | Done |
+
+### Milestone 15 decisions
+
+- **Companies without subsidiaries see no change.** Every row with no entity belongs to the parent. The parent entity appears the first time a subsidiary is added, so a company's existing books never need an entity column.
+- **Translation** uses each month's average rate for income and expenses and the month-end closing rate for cash. Rates are stored as exact decimals, and each line is rounded to the cent on its own, so a line ties to what a spreadsheet gives. If a month has no rate, the nearest earlier month is used (then the nearest later one), and the page says which. A currency with no rates at all is left out of the group and called out.
+- **Eliminations** run per pair of accounts and month. The smaller of the two sides is removed from both, so net income never moves. Whatever is left over stays in the group and is flagged when it's over $1, with both sides shown in their own currency. A one-sided booking is flagged as "One side only".
+- **Each entity on its own** shows its books in the reporting currency with nothing eliminated, so a subsidiary's view matches its own trial balance at the group's rates. Explanations stay on the consolidated view, which is the one the review pack approves.
+- **Chart C20** puts every entity on the same scale, so a small subsidiary looks small. Each entity keeps its colour across the page, and clicking a month opens that entity's transactions, with the original currency and rate under each amount.
+- **Test gate.** Two reference workbooks (FX translation and intercompany eliminations) are built with spreadsheet formulas and recalculated by LibreOffice; the domain tests read their results and must match to the cent. Property tests check that eliminations never change net income and that translation splits always add up.
+- Rates, entities and pairs are managed by admins and finance under Settings → Entities, and every change is in the audit log. Removing an entity that still has rows in the books is refused.
 
 ### Milestone 14 decisions
 

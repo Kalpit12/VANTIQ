@@ -15,6 +15,8 @@ import { VarianceBridge } from "@/components/charts/VarianceBridge";
 import { Card, PageHeader, StatusPill, VarianceChip } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
 import { getWorkspace } from "@/lib/data";
+import { scopeLabel, selectLedger } from "@/lib/entities";
+import { EntityEmpty, GroupNotice } from "@/components/entities/GroupNotice";
 import { can } from "@vantiq/db";
 import { findingTitle, varianceFor } from "@/lib/metrics";
 import { href, one, resolveView, type SearchParams } from "@/lib/view";
@@ -29,8 +31,9 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const ws = await getWorkspace();
   if (!ws.ledger.hasData()) return <NoData title="Variances" canImport={ws.mode === "db" && can.importData(ws.role)} />;
-  const ledger = ws.ledger;
-  const view = resolveView(sp, ledger);
+  const { ledger, entity } = selectLedger(ws, sp);
+  if (entity && !ledger.hasData()) return <EntityEmpty title="Variances" entity={entity} sp={sp} path="/variances" />;
+  const view = resolveView(sp, ws.ledger);
   const drill = (dc: string) => href("/variances", sp, { dc, dp: null, dper: null });
 
   const rows = ledger.tree(view.periods);
@@ -44,9 +47,10 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
   );
   const biggest = [...opexLeaves].sort((a, b) => Math.abs(b.variance.delta) - Math.abs(a.variance.delta))[0];
   const material = rows.filter((r) => !r.hasChildren && isMaterial(r.variance));
-  const expl = await explanationsFor(ws, view.periods);
+  // Explanations belong to the group's numbers, so one entity on its own shows none.
+  const expl = entity ? new Map<string, never>() : await explanationsFor(ws, view.periods);
   const locked = await monthLocked(ws, view.periods);
-  const canExplain = ws.mode === "db" && can.explain(ws.role) && !locked;
+  const canExplain = ws.mode === "db" && can.explain(ws.role) && !locked && !entity;
   const missing = materialCategoryIds(ledger, view.periods).filter((id) => !expl.has(id));
   const back = href("/variances", sp, { xerr: null });
   const dc = one(sp, "dc");
@@ -66,7 +70,7 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
     <>
       <PageHeader
         title="Variances"
-        subtitle={`Budget vs actual · ${view.label} · ${material.length} material line${material.length === 1 ? "" : "s"} (over ±${DEFAULT_THRESHOLDS.pct * 100}% and ±${formatCompactCurrency(DEFAULT_THRESHOLDS.abs)}, whichever is larger)`}
+        subtitle={`${entity ? `${entity.code} · ` : ""}Budget vs actual · ${view.label} · ${material.length} material line${material.length === 1 ? "" : "s"} (over ±${DEFAULT_THRESHOLDS.pct * 100}% and ±${formatCompactCurrency(DEFAULT_THRESHOLDS.abs)}, whichever is larger)`}
       >
         {canExplain && missing.length > 0 && (
           <form action={draftExplanationsAction}>
@@ -78,6 +82,7 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
         )}
       </PageHeader>
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
+      <GroupNotice group={ws.group} entity={entity} view={view} sp={sp} path="/variances" />
       {locked && (
         <p className="mb-4 rounded-md bg-accent-subtle px-3 py-2 text-[13px] text-ink">
           {view.label} is approved and locked, so its explanations can&apos;t change.{" "}
@@ -156,7 +161,7 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
                     </td>
                     <td className="px-3 py-2 text-right">{r.variance.comparison === 0 ? <span className="text-ink-3">—</span> : <VarianceChip v={r.variance} />}</td>
                     <td className="px-5 py-2">
-                      <ExplanationCell row={expl.get(r.category.id)} material={mat} href={drill(r.category.id)} />
+                      {entity ? <span className="text-[12px] text-ink-3">{mat ? "On the consolidated view" : ""}</span> : <ExplanationCell row={expl.get(r.category.id)} material={mat} href={drill(r.category.id)} />}
                     </td>
                   </tr>
                 );
@@ -170,9 +175,10 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
         sp={sp}
         view={view}
         path="/variances"
+        entities={ws.group?.byId}
         cited={dcLeaf ? expl.get(dcLeaf)?.citedTransactionIds : undefined}
         explanation={
-          dcLeaf && (expl.has(dcLeaf) || material.some((r) => r.category.id === dcLeaf)) ? (
+          dcLeaf && !entity && (expl.has(dcLeaf) || material.some((r) => r.category.id === dcLeaf)) ? (
             <ExplanationBlock row={expl.get(dcLeaf)} ledger={ledger} categoryId={dcLeaf} view={view} back={back} canEdit={canExplain} demo={ws.mode === "demo"} error={one(sp, "xerr")} />
           ) : undefined
         }

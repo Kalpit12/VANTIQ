@@ -87,6 +87,12 @@ import {
   IncomeError,
   listIncomeSources,
   saveReceipt,
+  addEntity,
+  addPair,
+  getGroup,
+  GroupError,
+  removeEntity,
+  saveRates,
   type Db,
 } from "../src";
 
@@ -904,5 +910,76 @@ describe("forecast scenarios", () => {
 
     const other = await freshCompany("Other Co");
     await expect(saveDriver(db, other.companyId, other.userId, base.id, "rd-cro", null)).rejects.toThrow("does not exist");
+  });
+});
+
+describe("multi-entity groups", () => {
+  const ledgerCsv = (rows: string[]) => parseCsv(["Date,Account,Account Name,Debit,Credit,Entity,Memo", ...rows].join("\n") + "\n");
+  const importFile = async (a: { companyId: string; userId: string }, kind: "ledger" | "budget" | "cash", table: ReturnType<typeof parseCsv>) => {
+    const id = await createDraft(db, a.companyId, a.userId, kind, `${kind}.csv`, table);
+    return commitImport(db, a.companyId, a.userId, id, guessColumns(table.headers, kind));
+  };
+
+  it("keeps existing rows with the parent, translates subsidiaries and eliminates intercompany pairs", async () => {
+    const a = await freshCompany("Group Co");
+    // Books from before there were entities: they belong to the parent.
+    await importFile(a, "ledger", ledgerCsv(["2026-09-03,6110,CRO services,100000.00,,,Site fees"]));
+    await expect(importFile(a, "ledger", ledgerCsv(["2026-09-03,6110,CRO services,5.00,,HLX-UK,Too early"]))).resolves.toMatchObject({ inserted: 0, errors: [{ row: 1, message: expect.stringMatching(/isn't set up/) }] });
+
+    await expect(addEntity(db, a.companyId, a.userId, { code: "HLX-UK", name: "Helixa UK Ltd", currency: "gbp" })).resolves.toMatch(/^[0-9a-f-]{36}$/);
+    await expect(addEntity(db, a.companyId, a.userId, { code: "hlx-uk", name: "Again", currency: "EUR" })).rejects.toThrow(GroupError);
+    const g = await getGroup(db, a.companyId);
+    expect(g.entities.map((e) => [e.code, e.currency, e.parent])).toEqual([["PARENT", "USD", true], ["HLX-UK", "GBP", false]]);
+    const [parent, ukEntity] = g.entities;
+
+    const res = await importFile(a, "ledger", ledgerCsv([
+      "2026-09-10,6310,Lab supplies,8000.00,,HLX-UK,Reagents",
+      "2026-09-30,4900,Intercompany income,,10000.00,HLX-UK,Research services",
+      "2026-09-30,6450,Intercompany research,12600.00,,PARENT,UK research services",
+      "2026-09-30,6450,Intercompany research,1.00,,HLX-XX,Unknown",
+    ]));
+    expect(res).toMatchObject({ inserted: 3, errors: [{ row: 4, message: expect.stringMatching(/HLX-XX/) }] });
+    await withCompany(db, a.companyId, (tx) =>
+      tx.execute(sql`insert into account_mappings (source_account_id, company_id, category_id, status)
+        select id, company_id, case code when '4900' then 'rev-collab' else 'rd-consult' end, 'confirmed' from source_accounts where code in ('4900', '6450')
+        on conflict (source_account_id) do update set category_id = excluded.category_id, excluded = false, status = 'confirmed'`),
+    );
+    // No rate yet: the subsidiary is left out and the gap is named.
+    let loaded = await loadLedger(db, a.companyId);
+    expect(loaded.group!.consolidation.rateIssues).toEqual([{ currency: "GBP", period: "2026-09", kind: "average", usedPeriod: null }]);
+    expect(new Ledger(loaded.data).actual({ periods: ["2026-09"], categoryIds: ["opex"] })).toBe(112_600_00);
+
+    await expect(saveRates(db, a.companyId, a.userId, [{ period: "2026-09", currency: "GBP", average: "1,26", closing: "1.3" }])).rejects.toThrow(GroupError);
+    await saveRates(db, a.companyId, a.userId, [{ period: "2026-09", currency: "GBP", average: "1.26", closing: "1.2800" }]);
+    expect((await getGroup(db, a.companyId)).rates).toEqual([{ period: "2026-09", currency: "GBP", average: "1.26", closing: "1.28" }]);
+    await addPair(db, a.companyId, a.userId, { entityId: ukEntity!.id, accountCode: "4900", counterpartyEntityId: parent!.id, counterpartyAccountCode: "6450" });
+    await expect(addPair(db, a.companyId, a.userId, { entityId: parent!.id, accountCode: "6450", counterpartyEntityId: ukEntity!.id, counterpartyAccountCode: "6310" })).rejects.toThrow(/already paired/);
+
+    await importFile(a, "cash", parseCsv("Month,Closing balance,Entity\n2026-09,5000000,\n2026-09,250000,HLX-UK\n"));
+    await importFile(a, "cash", parseCsv("Month,Closing balance,Entity\n2026-09,250000,HLX-UK\n")); // re-import replaces, never doubles
+    await importFile(a, "budget", parseCsv("Month,Account,Budget,Entity\n2026-09,6310,7000,HLX-UK\n2026-09,6110,90000,\n"));
+
+    loaded = await loadLedger(db, a.companyId);
+    expect(loaded.group!.consolidation.rateIssues).toEqual([]);
+    const ledger = new Ledger(loaded.data);
+    // UK lab 8,000 GBP x 1.26 = 10,080; intercompany 12,600 both sides, eliminated.
+    expect(ledger.actual({ periods: ["2026-09"], categoryIds: ["rd-lab"] })).toBe(10_080_00);
+    expect(ledger.actual({ periods: ["2026-09"], categoryIds: ["rd-consult"] })).toBe(0);
+    expect(ledger.actual({ periods: ["2026-09"], categoryIds: ["rev"] })).toBe(0);
+    expect(ledger.budget({ periods: ["2026-09"], categoryIds: ["rd"] })).toBe(90_000_00 + 8_820_00);
+    expect(ledger.cashAt("2026-09")).toBe(5_000_000_00 + 320_000_00);
+    expect(loaded.group!.consolidation.checks).toMatchObject([{ basis: "actual", status: "matched", eliminated: 12_600_00 }]);
+
+    await expect(removeEntity(db, a.companyId, a.userId, ukEntity!.id)).rejects.toThrow(/can't be removed/);
+    const actions = await withCompany(db, a.companyId, (tx) => tx.execute<{ action: string }>(sql`select action from audit_events where action like 'entity.%' order by at, action`));
+    expect(actions.map((r) => r.action)).toEqual(["entity.added", "entity.added", "entity.rates_saved", "entity.pair_added"]);
+  });
+
+  it("removes a subsidiary with no rows, and the parent with it when it was the last", async () => {
+    const a = await freshCompany("Undo Group Co");
+    const id = await addEntity(db, a.companyId, a.userId, { code: "DE", name: "GmbH", currency: "EUR" });
+    await removeEntity(db, a.companyId, a.userId, id);
+    expect((await getGroup(db, a.companyId)).entities).toEqual([]);
+    expect((await loadLedger(db, a.companyId)).group).toBeNull();
   });
 });

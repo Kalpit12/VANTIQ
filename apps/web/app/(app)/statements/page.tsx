@@ -6,6 +6,8 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
 import { getWorkspace } from "@/lib/data";
+import { scopeLabel, selectLedger } from "@/lib/entities";
+import { EntityEmpty, GroupNotice } from "@/components/entities/GroupNotice";
 import { can } from "@vantiq/db";
 import { trendPoints } from "@/lib/metrics";
 import { href, resolveView, type SearchParams } from "@/lib/view";
@@ -14,8 +16,9 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const ws = await getWorkspace();
   if (!ws.ledger.hasData()) return <NoData title="Statements" canImport={ws.mode === "db" && can.importData(ws.role)} />;
-  const ledger = ws.ledger;
-  const view = resolveView(sp, ledger);
+  const { ledger, entity } = selectLedger(ws, sp);
+  if (entity && !ledger.hasData()) return <EntityEmpty title="Statements" entity={entity} sp={sp} path="/statements" />;
+  const view = resolveView(sp, ws.ledger);
   const months = view.trend.slice(-6);
   const rows = ledger.tree(view.periods);
   const drill = (dc: string, dper?: Period) => href("/statements", sp, { dc, dp: null, dper: dper ?? null });
@@ -37,8 +40,9 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <PageHeader title="Statements" subtitle={`Income statement · last 6 months and ${view.label} · USD thousands, negatives in parentheses`} />
+      <PageHeader title="Statements" subtitle={`${entity ? `${entity.code} · ` : ws.group ? "Consolidated · " : ""}Income statement · last 6 months and ${view.label} · USD thousands, negatives in parentheses`} />
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
+      <GroupNotice group={ws.group} entity={entity} view={view} sp={sp} path="/statements" />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {multiples.map((m) => (
@@ -135,7 +139,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
       </Card>
       <p className="mt-3 text-[12px] text-ink-3">Balance sheet and cash flow statements follow once real ledgers are connected in the next milestone.</p>
 
-      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/statements" />
+      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/statements" entities={ws.group?.byId} />
     </>
   );
 }

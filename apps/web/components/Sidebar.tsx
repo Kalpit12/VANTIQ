@@ -19,6 +19,8 @@ const NAV = [
   { href: "/pack", label: "Review pack", icon: "M9 12l2 2 4-4M7 3h10a2 2 0 012 2v16l-7-3-7 3V5a2 2 0 012-2z" },
 ];
 
+const ENTITIES_NAV = { href: "/entities", label: "Entities", icon: "M3 21h18M5 21V8l7-5 7 5v13M9 21v-5h6v5M9 11h.01M15 11h.01" };
+
 const DATA_NAV = [
   { href: "/connections", label: "Connections", icon: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" },
   { href: "/import", label: "Import data", icon: "M12 15V3m0 0L8 7m4-4l4 4M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4" },
@@ -32,6 +34,7 @@ export function Sidebar({
   companies,
   companyId,
   needsMapping,
+  hasGroup = false,
 }: {
   mode: "demo" | "db";
   role: Role;
@@ -39,12 +42,14 @@ export function Sidebar({
   companies: { id: string; name: string; role: Role }[];
   companyId: string | null;
   needsMapping: number;
+  /** Multi-entity groups get the Entities screen. */
+  hasGroup?: boolean;
 }) {
   const pathname = usePathname();
   const sp = useSearchParams();
   // Keep the period selection when moving between screens, but drop drill-down state.
   const keep = new URLSearchParams();
-  for (const k of ["period", "mode"]) {
+  for (const k of ["period", "mode", "entity"]) {
     const v = sp.get(k);
     if (v) keep.set(k, v);
   }
@@ -57,7 +62,7 @@ export function Sidebar({
         <Wordmark />
       </div>
       <nav aria-label="Main" className="flex flex-col gap-0.5">
-        {NAV.map((item) => (
+        {(hasGroup ? [...NAV.slice(0, 8), ENTITIES_NAV, ...NAV.slice(8)] : NAV).map((item) => (
           <NavLink key={item.href} href={`${item.href}${qs}`} label={item.label} icon={item.icon} active={isActive(item.href)} />
         ))}
       </nav>

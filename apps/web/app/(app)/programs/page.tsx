@@ -13,6 +13,8 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { Card, PageHeader, VarianceChip } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
 import { getWorkspace } from "@/lib/data";
+import { scopeLabel, selectLedger } from "@/lib/entities";
+import { EntityEmpty, GroupNotice } from "@/components/entities/GroupNotice";
 import { can } from "@vantiq/db";
 import { varianceFor } from "@/lib/metrics";
 import { href, one, resolveView, type SearchParams } from "@/lib/view";
@@ -23,8 +25,9 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const ws = await getWorkspace();
   if (!ws.ledger.hasData()) return <NoData title="R&D programs" canImport={ws.mode === "db" && can.importData(ws.role)} />;
-  const ledger = ws.ledger;
-  const view = resolveView(sp, ledger);
+  const { ledger, entity } = selectLedger(ws, sp);
+  if (entity && !ledger.hasData()) return <EntityEmpty title="R&D programs" entity={entity} sp={sp} path="/programs" />;
+  const view = resolveView(sp, ws.ledger);
   const programs = ledger.data.programs;
   const selected = programs.find((p) => p.id === one(sp, "program")) ?? null;
   const rdTotal = ledger.actual({ periods: view.periods, categoryIds: ["rd"] });
@@ -54,7 +57,8 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="R&D programs" subtitle={`R&D spend by program · ${view.label} · compared with budget`} />
+      <PageHeader title="R&D programs" subtitle={`${entity ? `${entity.code} · ` : ""}R&D spend by program · ${view.label} · compared with budget`} />
+      <GroupNotice group={ws.group} entity={entity} view={view} sp={sp} path="/programs" />
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -168,7 +172,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
         </div>
       </Card>
 
-      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/programs" />
+      <DrillDrawer ledger={ledger} sp={sp} view={view} path="/programs" entities={ws.group?.byId} />
     </>
   );
 }

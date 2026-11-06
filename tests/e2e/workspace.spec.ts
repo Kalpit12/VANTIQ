@@ -590,3 +590,60 @@ test("forecast: switch scenarios, set a driver, a scenario change and a month by
   await page.getByRole("link", { name: "Overview" }).click();
   await expect(page.getByText("$59.6M", { exact: true })).toBeVisible();
 });
+
+test("set up a group: add a subsidiary, its rates, import its books and eliminate intercompany", async ({ page }) => {
+  await signUp(page, "Group Test Bio");
+  await page.goto("/settings/entities");
+  await page.getByLabel("Code").fill("HLX-UK");
+  await page.getByLabel("Legal name").fill("Group Test Bio Ltd");
+  await page.getByLabel("Currency").fill("GBP");
+  await page.getByRole("button", { name: "Add subsidiary" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await expect(page.getByLabel("Code for Group Test Bio", { exact: true })).toHaveValue("PARENT");
+  await expect(page.getByLabel("Code for Group Test Bio Ltd")).toHaveValue("HLX-UK");
+
+  await page.getByLabel(/Or paste rows/).fill("Month\tCurrency\tAverage\tClosing\n2026-09\tGBP\t1.25\t1.30");
+  await page.getByRole("button", { name: "Save pasted rates" }).click();
+  await expect(page.getByRole("cell", { name: /1\.25 \/ 1\.3/ })).toBeVisible();
+
+  const csv = [
+    "Date,Account,Debit,Credit,Entity,Memo",
+    "2026-09-03,6110 · CRO clinical services,100000.00,,,Site fees",
+    "2026-09-10,6310 · Lab supplies,8000.00,,HLX-UK,Reagents",
+    "2026-09-30,4900 · Intercompany service income,,10000.00,HLX-UK,Research services to parent",
+    "2026-09-30,6410 · Research consultants,12500.00,,PARENT,UK research services",
+    "2026-09-30,6410 · Research consultants,1.00,,HLX-XX,Wrong entity",
+  ].join("\n");
+  await page.goto("/import");
+  await page.getByLabel("File", { exact: true }).setInputFiles({ name: "group-gl.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Upload and check columns" }).click();
+  await expect(page.getByText("4 rows ready to import.")).toBeVisible();
+  await expect(page.getByText(/Entity "HLX-XX" isn't set up/)).toBeVisible();
+  await page.getByRole("button", { name: "Import 4 rows" }).click();
+  await expect(page.getByText(/Imported group-gl\.csv\. 4 rows saved/)).toBeVisible();
+
+  await page.goto("/settings/entities");
+  await page.locator("select[name=entityId]").selectOption({ label: "HLX-UK" });
+  await page.locator("select[name=accountCode]").selectOption("4900");
+  await page.locator("select[name=counterpartyEntityId]").selectOption({ label: "PARENT" });
+  await page.locator("select[name=counterpartyAccountCode]").selectOption("6410");
+  await page.getByRole("button", { name: "Add pair" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Entities", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/entities/);
+  await expect(page.getByRole("heading", { name: "Intercompany matches in Sep 2026" })).toBeVisible();
+  await expect(page.getByText("Matched")).toBeVisible();
+  // UK lab supplies: £8,000 at 1.25 = $10,000; the $12,500 recharge is eliminated on both sides.
+  const table = page.locator("table").filter({ has: page.locator("th", { hasText: "Eliminations" }) });
+  await expect(rowOf(table, /^\s*Operating expenses/)).toContainText("(13)");
+  await expect(rowOf(table, /^\s*Operating expenses/).locator("td").last()).toHaveText("110");
+
+  await page.goto("/settings/audit?area=entity");
+  await expect(page.getByText("Paired intercompany accounts HLX-UK 4900 ↔ PARENT 6410")).toBeVisible();
+});
+
+/** A table body row by the text of its first cell. */
+function rowOf(table: import("@playwright/test").Locator, label: RegExp) {
+  return table.locator("tbody tr").filter({ has: table.page().locator("td:first-child", { hasText: label }) });
+}

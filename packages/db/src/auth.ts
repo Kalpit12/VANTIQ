@@ -122,6 +122,8 @@ export const can = {
   manageInventory: (r: Role) => r === "admin" || r === "finance",
   /** Set forecast drivers, scenario changes and months by hand. */
   manageForecast: (r: Role) => r === "admin" || r === "finance",
+  /** Set up entities, FX rates and intercompany pairs. */
+  manageEntities: (r: Role) => r === "admin" || r === "finance",
 };
 
 export async function listMembers(db: Db, companyId: string) {

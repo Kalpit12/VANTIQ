@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, char, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, char, date, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 /*
  * Tenancy (architecture.md 5.1): every tenant-owned table has company_id and a
@@ -133,6 +133,62 @@ export const departments = pgTable(
   (t) => [uniqueIndex("departments_name_idx").on(t.companyId, t.name)],
 );
 
+/**
+ * Legal entities in a multi-entity group (Phase 3). A company with no rows
+ * here is a single entity. Once it has some, one is the parent: its currency
+ * is the company's reporting currency, and ledger, budget and cash rows with
+ * no entity belong to it (so connected systems and older imports keep working).
+ */
+export const entities = pgTable(
+  "entities",
+  {
+    id: id(),
+    companyId: companyId(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** The currency the entity keeps its books in (ISO 4217). */
+    currency: char("currency", { length: 3 }).notNull(),
+    isParent: boolean("is_parent").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("entities_code_idx").on(t.companyId, t.code)],
+);
+
+/** Monthly rates into the company's reporting currency: units of it per one unit of `currency`. */
+export const fxRates = pgTable(
+  "fx_rates",
+  {
+    companyId: companyId(),
+    period: char("period", { length: 7 }).notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    /** Average for the month: income and expenses. */
+    averageRate: numeric("average_rate", { precision: 22, scale: 10 }).notNull(),
+    /** Month end: cash and other balances. */
+    closingRate: numeric("closing_rate", { precision: 22, scale: 10 }).notNull(),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.period, t.currency] })],
+);
+
+/** An account in one entity that mirrors an account in another: eliminated on consolidation. */
+export const intercompanyPairs = pgTable(
+  "intercompany_pairs",
+  {
+    id: id(),
+    companyId: companyId(),
+    entityId: uuid("entity_id").notNull().references(() => entities.id, { onDelete: "cascade" }),
+    sourceAccountId: uuid("source_account_id").notNull().references(() => sourceAccounts.id, { onDelete: "cascade" }),
+    counterpartyEntityId: uuid("counterparty_entity_id").notNull().references(() => entities.id, { onDelete: "cascade" }),
+    counterpartyAccountId: uuid("counterparty_account_id").notNull().references(() => sourceAccounts.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("intercompany_pairs_side_idx").on(t.companyId, t.entityId, t.sourceAccountId)],
+);
+
+const entityId = () => uuid("entity_id").references((): AnyPgColumn => entities.id);
+
 export const IMPORT_KINDS = ["ledger", "budget", "cash"] as const;
 
 export const imports = pgTable(
@@ -236,7 +292,9 @@ export const transactions = pgTable(
     vendorId: uuid("vendor_id").references(() => vendors.id),
     departmentId: uuid("department_id").references(() => departments.id),
     programId: uuid("program_id").references(() => programs.id),
-    /** Debit-positive minor units, as in the source ledger. */
+    /** The entity that booked the line; null means the parent (or a single-entity company). */
+    entityId: entityId(),
+    /** Debit-positive minor units, as in the source ledger, in the entity's currency. */
     amountMinor: money("amount_minor"),
     currency: char("currency", { length: 3 }).notNull().default("USD"),
     memo: text("memo").notNull().default(""),
@@ -255,6 +313,7 @@ export const budgetLines = pgTable(
     period: char("period", { length: 7 }).notNull(),
     sourceAccountId: uuid("source_account_id").notNull().references(() => sourceAccounts.id),
     programId: uuid("program_id").references(() => programs.id),
+    entityId: entityId(),
     /** Natural-sign minor units: positive for planned spend and planned income. */
     amountMinor: money("amount_minor"),
   },
@@ -266,10 +325,12 @@ export const cashBalances = pgTable(
   {
     companyId: companyId(),
     period: char("period", { length: 7 }).notNull(),
+    entityId: entityId(),
+    /** In the entity's currency. */
     balanceMinor: money("balance_minor"),
     importId: uuid("import_id").references(() => imports.id, { onDelete: "set null" }),
   },
-  (t) => [primaryKey({ columns: [t.companyId, t.period] })],
+  (t) => [unique("cash_balances_entity_period_key").on(t.companyId, t.entityId, t.period).nullsNotDistinct()],
 );
 
 export const auditEvents = pgTable(
@@ -634,4 +695,7 @@ export const TENANT_TABLES = [
   "income_sources",
   "inventory_batches",
   "scenarios",
+  "entities",
+  "fx_rates",
+  "intercompany_pairs",
 ] as const;

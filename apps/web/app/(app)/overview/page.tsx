@@ -16,6 +16,8 @@ import { Card, PageHeader, VarianceChip } from "@/components/ui";
 import { MappingBanner, NoData } from "@/components/NoData";
 import { ReconcileBanner } from "@/components/ReconcileBanner";
 import { getWorkspace } from "@/lib/data";
+import { scopeLabel, selectLedger } from "@/lib/entities";
+import { EntityEmpty, GroupNotice } from "@/components/entities/GroupNotice";
 import { can } from "@vantiq/db";
 import { cashProjection, findingTitle, materialLines, runwayAt, trendPoints, varianceFor } from "@/lib/metrics";
 import { href, one, resolveView, type SearchParams } from "@/lib/view";
@@ -28,8 +30,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const ws = await getWorkspace();
   if (!ws.ledger.hasData()) return <NoData title="Overview" canImport={ws.mode === "db" && can.importData(ws.role)} />;
-  const ledger = ws.ledger;
-  const view = resolveView(sp, ledger);
+  const { ledger, entity } = selectLedger(ws, sp);
+  if (entity && !ledger.hasData()) return <EntityEmpty title="Overview" entity={entity} sp={sp} path="/overview" />;
+  const view = resolveView(sp, ws.ledger);
   const drill = (dc: string, extra: Record<string, string | null> = {}) => href("/overview", sp, { dc, dp: null, dper: null, ...extra });
 
   const income = varianceFor(ledger, view.periods, "rev");
@@ -42,7 +45,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const spark = (id: string) => view.trend.map((p) => ledger.actual({ periods: [p], categoryIds: [id] }));
   const material = materialLines(ledger, view);
   const attention = material.slice(0, 5);
-  const expl = await explanationsFor(ws, view.periods);
+  // Explanations belong to the group's numbers, so one entity on its own shows none.
+  const expl = entity ? new Map<string, never>() : await explanationsFor(ws, view.periods);
   const locked = await monthLocked(ws, view.periods);
   const dc = one(sp, "dc");
   const dcExplain = dc && (expl.has(dc) || material.some((m) => m.categoryId === dc)) ? dc : null;
@@ -68,7 +72,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Overview" subtitle={`${ledger.data.companyName} · ${view.label} · compared with budget`} />
+      <PageHeader title="Overview" subtitle={`${scopeLabel(ws, entity)} · ${view.label} · compared with budget`} />
+      <GroupNotice group={ws.group} entity={entity} view={view} sp={sp} path="/overview" />
       {ws.mode === "db" && <ReconcileBanner companyId={ws.companyId!} />}
       <MappingBanner unmapped={ws.unmapped} unconfirmed={ws.unconfirmed} />
 
@@ -125,7 +130,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                         {a.variance.delta > 0 ? "+" : ""}
                         {formatCompactCurrency(a.variance.delta)} <VarianceChip v={a.variance} />
                       </span>
-                      <ExplanationPill row={expl.get(a.categoryId)} />
+                      {!entity && <ExplanationPill row={expl.get(a.categoryId)} />}
                     </span>
                   </Link>
                 </li>
@@ -193,7 +198,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             rows: cash.data.map((d) => [d.label, d.actual === null ? "—" : formatCompactCurrency(d.actual), d.projected === null ? "—" : formatCompactCurrency(d.projected)]),
           }}
         >
-          <CashChart data={cash.data} today={cash.today} todayValue={cash.todayValue} zeroLabel={cash.zeroLabel} zeroText={cash.zeroText} events={cash.events} />
+          <CashChart data={cash.data} today={cash.today} todayValue={cash.todayValue} zeroLabel={cash.zeroLabel} zeroText={cash.zeroText} events={entity ? [] : cash.events} />
         </ChartCard>
         ) : (
           <Card className="flex flex-col justify-center p-5">
@@ -213,9 +218,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         sp={sp}
         view={view}
         path="/overview"
+        entities={ws.group?.byId}
         cited={dcExplain ? expl.get(dcExplain)?.citedTransactionIds : undefined}
         explanation={
-          dcExplain ? (
+          dcExplain && !entity ? (
             <ExplanationBlock
               row={expl.get(dcExplain)}
               ledger={ledger}
