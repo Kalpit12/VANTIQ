@@ -3,8 +3,9 @@ import { sendEmailsAfterResponse } from "./email";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { Ledger } from "@vantiq/domain";
-import { generateSampleCompany } from "@vantiq/fixtures";
+import { consolidate, consolidatedLedgerData, Ledger } from "@vantiq/domain";
+import { generateSampleGroup } from "@vantiq/fixtures";
+import { makeGroup, type Group } from "./entities";
 import { getDb, getSession, ledgerVersion, loadLedger, type Role, type SessionUser } from "@vantiq/db";
 
 /**
@@ -27,10 +28,19 @@ export interface Workspace {
   session: SessionUser | null;
   unmapped: { accounts: number; transactions: number };
   unconfirmed: number;
+  /** Multi-entity groups: entities, the consolidation, and each entity's own ledger. `ledger` is then the consolidated group. */
+  group: Group | null;
 }
 
-let demo: Ledger | null = null;
-const ledgers = new Map<string, { version: string; ledger: Ledger; unmapped: Workspace["unmapped"]; unconfirmed: number }>();
+let demo: { ledger: Ledger; group: Group } | null = null;
+const ledgers = new Map<string, { version: string; ledger: Ledger; unmapped: Workspace["unmapped"]; unconfirmed: number; group: Group | null }>();
+
+/** The sample company as a group of three entities (US parent, Australia, Canada), consolidated. */
+function demoWorkspace() {
+  const g = generateSampleGroup();
+  const consolidation = consolidate(g.books, g.fx, g.pairs, { reportingCurrency: "USD", categories: g.base.categories });
+  return { ledger: new Ledger(consolidatedLedgerData(g.base, consolidation)), group: makeGroup(g.base, consolidation, g.fx) };
+}
 
 /** The signed-in user, or null. Never redirects. */
 export const currentSession = cache(async (): Promise<SessionUser | null> => {
@@ -42,8 +52,8 @@ export const currentSession = cache(async (): Promise<SessionUser | null> => {
 /** Everything a screen needs. Sends signed-out visitors to the sign-in page. */
 export const getWorkspace = cache(async (): Promise<Workspace> => {
   if (!dbEnabled()) {
-    demo ??= new Ledger(generateSampleCompany());
-    return { mode: "demo", ledger: demo, companyId: null, companyName: demo.data.companyName, role: "viewer", session: null, unmapped: { accounts: 0, transactions: 0 }, unconfirmed: 0 };
+    demo ??= demoWorkspace();
+    return { mode: "demo", ledger: demo.ledger, companyId: null, companyName: demo.ledger.data.companyName, role: "viewer", session: null, unmapped: { accounts: 0, transactions: 0 }, unconfirmed: 0, group: demo.group };
   }
   const session = await currentSession();
   if (!session) redirect("/sign-in");
@@ -55,7 +65,9 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
   let hit = ledgers.get(companyId);
   if (!hit || hit.version !== version) {
     const loaded = await loadLedger(db, companyId);
-    hit = { version, ledger: new Ledger(loaded.data), unmapped: loaded.unmapped, unconfirmed: loaded.unconfirmed };
+    const { transactions: _t, budget: _b, cash: _c, ...base } = loaded.data;
+    const group = loaded.group ? makeGroup(base, loaded.group.consolidation, loaded.group.setup.rates) : null;
+    hit = { version, ledger: new Ledger(loaded.data), unmapped: loaded.unmapped, unconfirmed: loaded.unconfirmed, group };
     ledgers.set(companyId, hit);
   }
   return {
@@ -67,6 +79,7 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
     session,
     unmapped: hit.unmapped,
     unconfirmed: hit.unconfirmed,
+    group: hit.group,
   };
 });
 

@@ -31,6 +31,7 @@ export const AUDIT_AREAS = [
   { key: "income", label: "Grants and income" },
   { key: "inventory", label: "Inventory" },
   { key: "forecast", label: "Forecast" },
+  { key: "entity", label: "Entities" },
   { key: "company", label: "Company" },
 ] as const;
 
@@ -129,6 +130,22 @@ export function describeEvent(e: Pick<AuditRow, "action" | "target" | "detail">,
       return `Cleared ${e.target} for ${month(String(d.period ?? ""))} in ${String(d.scenario ?? "")}`;
     case "inventory.removed":
       return `Removed ${e.target}`;
+    case "entity.added":
+      return d.parent ? `Made ${e.target} (${String(d.code ?? "")}, ${String(d.currency ?? "")}) the parent entity` : `Added the entity ${e.target} (${String(d.code ?? "")}, books in ${String(d.currency ?? "")})`;
+    case "entity.renamed": {
+      const from = (d.from ?? {}) as { code?: string; name?: string };
+      return `Renamed the entity ${from.name ?? ""} (${from.code ?? ""}) to ${e.target}`;
+    }
+    case "entity.removed":
+      return `Removed the entity ${e.target}${d.parent ? " (the parent, as no subsidiaries were left)" : ""}`;
+    case "entity.rates_saved":
+      return `Saved ${plural(d.rows, "rate")} for ${e.target}, ${String(d.months ?? "")}`;
+    case "entity.rate_removed":
+      return `Removed the ${e.target} rate for ${month(String(d.month ?? ""))}`;
+    case "entity.pair_added":
+      return `Paired intercompany accounts ${e.target}`;
+    case "entity.pair_removed":
+      return `Removed the intercompany pair ${e.target}`;
     case "inventory.imported":
       return `Imported inventory: ${plural(d.added, "lot")} added, ${Number(d.updated ?? 0)} updated${Number(d.skipped ?? 0) ? `, ${plural(d.skipped, "row")} skipped` : ""}`;
     case "inventory.journal_exported":

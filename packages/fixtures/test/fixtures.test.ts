@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { billedForTrial, CLOSE_TEMPLATE, expiryBuckets, estimateAccrual, Ledger, receivedFor, scheduleStatus, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
-import { generateSampleClose, generateSampleCompany, generateSampleIncome, generateSampleInventory, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
+import { consolidate, type Transaction, billedForTrial, CLOSE_TEMPLATE, expiryBuckets, estimateAccrual, Ledger, receivedFor, scheduleStatus, taskStatus, ytdPeriods, isMaterial } from "@vantiq/domain";
+import { generateSampleClose, generateSampleCompany, generateSampleGroup, SAMPLE_IC_MISMATCH, generateSampleIncome, generateSampleInventory, generateSampleTrials, SAMPLE_CLOSE_TODAY, SAMPLE_LAST_PERIOD, SAMPLE_TRIALS_AS_OF, type SampleTrial } from "../src";
 
 describe("sample company", () => {
   const data = generateSampleCompany();
@@ -94,5 +94,42 @@ describe("sample inventory", () => {
     expect(rows.find((r) => r.batch.lot === "DP-2405")).toMatchObject({ bucket: "6-12", usedFromEarlierLots: 480, usedBeforeExpiry: 1440, writeOff: 64_800_00 });
     expect(rows.find((r) => r.batch.lot === "RS-118")).toMatchObject({ basis: "policy", writeOff: 15_000_00 });
     expect(summary.byProduct[0]).toMatchObject({ product: "HX-204 drug product 50 mg", atRisk: 511_200_00 });
+  });
+});
+
+describe("sample group", () => {
+  const group = generateSampleGroup();
+  const company = generateSampleCompany();
+  const result = consolidate(group.books, group.fx, group.pairs, { reportingCurrency: "USD", categories: company.categories });
+  const strip = (t: Transaction) => ({ id: t.id, date: t.date, categoryId: t.categoryId, amount: t.amount, vendorId: t.vendorId, departmentId: t.departmentId, programId: t.programId, memo: t.memo, accountCode: t.accountCode });
+
+  it("consolidates back to the single-company sample, plus August's unmatched intercompany difference", () => {
+    const flags = result.checks.filter((c) => c.status !== "matched");
+    expect(flags.map((c) => `${c.basis} ${c.pairId} ${c.period} ${c.status}`)).toEqual([`actual ic-research ${SAMPLE_IC_MISMATCH} difference`]);
+    const external = result.transactions.filter((t) => !t.intercompany);
+    expect(external.map(strip).sort((a, b) => a.id.localeCompare(b.id))).toEqual([...company.transactions].sort((a, b) => a.id.localeCompare(b.id)));
+    const left = result.transactions.filter((t) => t.intercompany);
+    expect(left).toHaveLength(1);
+    // Canada's invoice is worth more at August's rate than the parent booked: the extra stays as income.
+    expect([left[0]!.categoryId, left[0]!.amount]).toEqual(["rev-collab", flags[0]!.difference]);
+    expect(result.rateIssues).toEqual([]);
+  });
+
+  it("consolidates the budget and cash exactly", () => {
+    const sum = (xs: { period: string; categoryId: string; programId: string | null; amount: number }[]) => {
+      const m = new Map<string, number>();
+      for (const x of xs) m.set(`${x.period}|${x.categoryId}|${x.programId}`, (m.get(`${x.period}|${x.categoryId}|${x.programId}`) ?? 0) + x.amount);
+      return m;
+    };
+    expect(sum(result.budget)).toEqual(sum(company.budget));
+    expect(result.cash).toEqual(company.cash);
+  });
+
+  it("puts each program in its entity and books each subsidiary in its own currency", () => {
+    const au = result.entities.find((e) => e.entity.id === "e-au")!;
+    expect(new Set(au.transactions.filter((t) => !t.intercompany).map((t) => t.programId))).toEqual(new Set(["hx204"]));
+    expect(au.transactions.every((t) => t.original?.currency === "AUD")).toBe(true);
+    // Every AUD line is bigger in AUD than in USD.
+    expect(au.transactions.every((t) => Math.abs(t.original!.amount) >= Math.abs(t.amount))).toBe(true);
   });
 });

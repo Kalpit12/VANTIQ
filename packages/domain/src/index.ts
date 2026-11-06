@@ -10,3 +10,4 @@ export * from "./close";
 export * from "./income";
 export * from "./inventory";
 export * from "./forecast";
+export * from "./consolidate";

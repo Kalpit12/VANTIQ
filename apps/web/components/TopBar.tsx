@@ -9,11 +9,14 @@ export function TopBar({
   sample,
   firstPeriod,
   latestPeriod,
+  entities = [],
 }: {
   companyName: string;
   sample: boolean;
   firstPeriod: string | null;
   latestPeriod: string | null;
+  /** Multi-entity groups: the entity switcher's choices, parent first. */
+  entities?: { code: string; name: string }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -26,9 +29,13 @@ export function TopBar({
   // A review pack is always one month.
   const showMode = !/^\/(pack|trials|close|income|inventory)/.test(pathname);
 
+  // Consolidated vs one entity (design.md 17) applies to the screens built on the ledger.
+  const showEntity = entities.length > 0 && /^\/(overview|variances|programs|statements)/.test(pathname);
+  const entity = sp.get("entity") ?? "";
+
   const go = (changes: Record<string, string>) => {
     const q = new URLSearchParams(sp.toString());
-    for (const [k, v] of Object.entries(changes)) q.set(k, v);
+    for (const [k, v] of Object.entries(changes)) if (v) q.set(k, v); else q.delete(k);
     for (const k of ["dc", "dp", "dper"]) q.delete(k);
     router.push(`${pathname}?${q.toString()}`);
   };
@@ -39,6 +46,26 @@ export function TopBar({
         <span className="text-[13px] font-semibold text-ink">{companyName}</span>
         {sample && <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-medium text-ink-2">Sample data</span>}
       </div>
+      {showEntity && (
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="entity">
+            Entity
+          </label>
+          <select
+            id="entity"
+            value={entities.some((e) => e.code === entity) ? entity : ""}
+            onChange={(e) => go({ entity: e.target.value })}
+            className="h-8 max-w-[220px] rounded-md border border-line-strong bg-surface px-2 text-[13px] text-ink"
+          >
+            <option value="">Consolidated ({entities.length} entities)</option>
+            {entities.map((e) => (
+              <option key={e.code} value={e.code}>
+                {e.code} · {e.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {showPeriod && (
       <div className="flex items-center gap-2 sm:ml-4">
         <label className="sr-only" htmlFor="period">

@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           companies={ws.session?.companies ?? []}
           companyId={ws.companyId}
           needsMapping={ws.unmapped.accounts + ws.unconfirmed}
+          hasGroup={Boolean(ws.group)}
         />
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             sample={ws.mode === "demo"}
             firstPeriod={hasData ? ws.ledger.firstPeriod() : null}
             latestPeriod={hasData ? ws.ledger.latestPeriod() : null}
+            entities={ws.group?.entities.map((e) => ({ code: e.code, name: e.name })) ?? []}
           />
         </Suspense>
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">{children}</main>

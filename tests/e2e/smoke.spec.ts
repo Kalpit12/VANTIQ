@@ -13,6 +13,7 @@ const pages = [
   { path: "/trials/hx-204-101", heading: "HX-204-101" },
   { path: "/income", heading: "Grants and income" },
   { path: "/inventory", heading: "Inventory and expiry" },
+  { path: "/entities", heading: "Entities" },
 ];
 
 for (const p of pages) {
@@ -192,3 +193,48 @@ test("forecast shows the next 12 months under each scenario", async ({ page }) =
   await expect(page.getByText(/· Scenario: Upside$/)).toBeVisible();
   await expect(page.getByText("This sample forecast uses the standard drivers. Sign up to set your own.")).toBeVisible();
 });
+
+test("switches between the consolidated group and one entity", async ({ page }) => {
+  await page.goto("/overview");
+  await expect(page.getByText(/Helixa Therapeutics · consolidated, 3 entities · Sep 2026/)).toBeVisible();
+  await page.getByLabel("Entity", { exact: true }).selectOption("HLX-AU");
+  await expect(page).toHaveURL(/entity=HLX-AU/);
+  await expect(page.getByText(/Helixa Therapeutics Pty Ltd \(HLX-AU, books in AUD\) · Sep 2026/)).toBeVisible();
+  await expect(page.getByText(/translated from AUD to USD at each month's average rate/)).toBeVisible();
+  // The entity carries over to the next screen, and its drill-down shows the Australian dollars behind each line.
+  await page.getByRole("link", { name: "Variances" }).click();
+  await expect(page).toHaveURL(/entity=HLX-AU/);
+  await page.getByRole("row", { name: /CRO and clinical fees/ }).getByRole("link").first().click();
+  const drawer = page.getByRole("dialog", { name: /CRO and clinical fees/ });
+  await expect(drawer.getByText(/^A\$[\d,]+\.\d\d at 0\.\d{4}$/).first()).toBeVisible();
+  await expect(drawer.getByRole("cell", { name: "HLX-AU" }).first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Back to consolidated →" }).click();
+  await expect(page).not.toHaveURL(/entity=/);
+});
+
+test("entities page: each entity, eliminations and the group add up, and August's intercompany difference is flagged", async ({ page }) => {
+  await page.goto("/entities?period=2026-08");
+  await expect(page.getByRole("heading", { name: /carries \d+% of the group's operating expenses in Aug 2026/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1 intercompany pair doesn't match in Aug 2026" })).toBeVisible();
+  await expect(page.getByText("Sides differ", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 intercompany pair doesn't match in Aug 2026: $1k is left in the group after elimination.")).toBeVisible();
+  const table = page.locator("table").filter({ has: page.locator("th", { hasText: "Eliminations" }) });
+  const num = (s: string) => (s.trim() === "–" ? 0 : (s.includes("(") ? -1 : 1) * Number(s.replace(/[(),]/g, "")));
+  await expect(table.locator("tbody tr")).toHaveCount(7);
+  for (const row of await table.locator("tbody tr").all()) {
+    const cells = (await row.locator("td").allInnerTexts()).slice(1).map(num);
+    const consolidated = cells.pop()!;
+    // Thousands are rounded per cell, so allow one per column.
+    expect(Math.abs(cells.reduce((s, v) => s + v, 0) - consolidated)).toBeLessThanOrEqual(cells.length);
+  }
+  // Eliminations never move net income.
+  await expect(rowOf(table, /^\s*Net income/).locator("td").nth(4)).toHaveText("–");
+  await rowOf(table, /^\s*Operating expenses/).getByRole("link").nth(1).click();
+  await expect(page.getByRole("dialog", { name: /Operating expenses/ }).getByText(/A\$/).first()).toBeVisible();
+});
+
+/** A table body row by the text of its first cell. */
+function rowOf(table: import("@playwright/test").Locator, label: RegExp) {
+  return table.locator("tbody tr").filter({ has: table.page().locator("td:first-child", { hasText: label }) });
+}

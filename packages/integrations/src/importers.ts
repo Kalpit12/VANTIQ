@@ -29,6 +29,7 @@ export const FIELDS: Record<ImportKind, FieldSpec[]> = {
     { key: "memo", label: "Memo", required: false, aliases: ["memo", "description", "memo/description", "line description", "narrative"] },
     { key: "department", label: "Department", required: false, aliases: ["department", "dept", "cost center", "cost centre"] },
     { key: "program", label: "Program or project", required: false, aliases: ["program", "project", "class", "program code", "project code"] },
+    { key: "entity", label: "Entity", required: false, aliases: ["entity", "entity code", "entity id", "legal entity", "subsidiary"], hint: "Multi-entity groups: the entity code from Settings → Entities." },
   ],
   budget: [
     { key: "period", label: "Month", required: true, aliases: ["period", "month", "date", "budget month"] },
@@ -36,10 +37,12 @@ export const FIELDS: Record<ImportKind, FieldSpec[]> = {
     { key: "accountName", label: "Account name", required: false, aliases: ["account name", "account description"] },
     { key: "program", label: "Program or project", required: false, aliases: ["program", "project", "class"] },
     { key: "amount", label: "Budget amount", required: true, aliases: ["amount", "budget", "budget amount", "value"], hint: "Positive for both spend and income." },
+    { key: "entity", label: "Entity", required: false, aliases: ["entity", "entity code", "entity id", "legal entity", "subsidiary"], hint: "Multi-entity groups: the entity code from Settings → Entities." },
   ],
   cash: [
     { key: "period", label: "Month", required: true, aliases: ["period", "month", "date", "month end"] },
     { key: "balance", label: "Closing cash balance", required: true, aliases: ["balance", "closing balance", "cash", "cash balance", "ending balance", "amount"] },
+    { key: "entity", label: "Entity", required: false, aliases: ["entity", "entity code", "entity id", "legal entity", "subsidiary"], hint: "Multi-entity groups: the entity code from Settings → Entities." },
   ],
 };
 
@@ -89,6 +92,8 @@ export interface LedgerRecord {
   memo: string;
   department: string;
   program: string;
+  /** Entity code, or "" (the parent, or a single-entity company). */
+  entity: string;
 }
 
 export interface BudgetRecord {
@@ -99,12 +104,14 @@ export interface BudgetRecord {
   program: string;
   /** Natural-sign cents: positive for planned spend and planned income. */
   amount: Cents;
+  entity: string;
 }
 
 export interface CashRecord {
   row: number;
   period: Period;
   balance: Cents;
+  entity: string;
 }
 
 export type ImportRecord = LedgerRecord | BudgetRecord | CashRecord;
@@ -183,6 +190,7 @@ export function normalize(kind: ImportKind, table: RawTable, map: ColumnMap): No
         memo: get(r, "memo"),
         department: get(r, "department"),
         program: get(r, "program"),
+        entity: get(r, "entity"),
       });
     } else if (kind === "budget") {
       const rawPeriod = get(r, "period");
@@ -193,7 +201,7 @@ export function normalize(kind: ImportKind, table: RawTable, map: ColumnMap): No
       if (!accountCode) return fail(row, "Account number is empty.");
       const amount = parseAmount(get(r, "amount"));
       if (amount === null) return fail(row, `Budget amount "${get(r, "amount")}" is not a number.`);
-      records.push({ row, period, ...splitAccount(accountCode, get(r, "accountName")), program: get(r, "program"), amount });
+      records.push({ row, period, ...splitAccount(accountCode, get(r, "accountName")), program: get(r, "program"), amount, entity: get(r, "entity") });
     } else {
       const rawPeriod = get(r, "period");
       if (!rawPeriod) return void skipped++;
@@ -201,7 +209,7 @@ export function normalize(kind: ImportKind, table: RawTable, map: ColumnMap): No
       if (!period) return fail(row, `Month "${rawPeriod}" is not a month.`);
       const balance = parseAmount(get(r, "balance"));
       if (balance === null) return fail(row, `Balance "${get(r, "balance")}" is not a number.`);
-      records.push({ row, period, balance });
+      records.push({ row, period, balance, entity: get(r, "entity") });
     }
   });
   return { records, errors, skipped };

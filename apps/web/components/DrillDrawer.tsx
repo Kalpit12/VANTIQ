@@ -4,9 +4,11 @@ import {
   formatDate,
   periodLabel,
   UNASSIGNED,
+  type Entity,
   type Filter,
   type Ledger,
 } from "@vantiq/domain";
+import { formatMoney } from "@/lib/entities";
 import { href, one, type SearchParams, type View } from "@/lib/view";
 import { EscToClose } from "./EscToClose";
 
@@ -22,6 +24,7 @@ export function DrillDrawer({
   path,
   explanation,
   cited,
+  entities,
 }: {
   ledger: Ledger;
   sp: SearchParams;
@@ -30,6 +33,8 @@ export function DrillDrawer({
   /** Shown above the transactions when the drawer is opened on a whole line for the view. */
   explanation?: React.ReactNode;
   cited?: string[];
+  /** Multi-entity groups: shows which entity booked each line, and its own currency and rate. */
+  entities?: Map<string, Entity>;
 }) {
   const dc = one(sp, "dc");
   if (!dc) return null;
@@ -94,6 +99,7 @@ export function DrillDrawer({
                 <th className="py-2 font-medium">Vendor and memo</th>
                 <th className="py-2 pr-4 font-medium">Account</th>
                 <th className="py-2 pr-4 font-medium">Program</th>
+                {entities && <th className="py-2 pr-4 font-medium">Entity</th>}
                 <th className="px-5 py-2 text-right font-medium">Amount</th>
               </tr>
             </thead>
@@ -110,7 +116,21 @@ export function DrillDrawer({
                   </td>
                   <td className="py-2 pr-4 font-mono text-[12px] text-ink-2">{t.accountCode}</td>
                   <td className="whitespace-nowrap py-2 pr-4 text-ink-2">{t.programId ? programs.get(t.programId) : "—"}</td>
-                  <td className={`whitespace-nowrap px-5 py-2 text-right ${t.amount < 0 ? "text-good" : "text-ink"}`}>{formatCurrency(t.amount)}</td>
+                  {entities && <td className="whitespace-nowrap py-2 pr-4 font-mono text-[12px] text-ink-2">{(t.entityId && entities.get(t.entityId)?.code) ?? "—"}</td>}
+                  <td className={`whitespace-nowrap px-5 py-2 text-right ${t.amount < 0 ? "text-good" : "text-ink"}`}>
+                    <span title={t.original ? `${formatMoney(t.original.amount, t.original.currency)} at ${t.original.rate} ${t.original.currency} to USD (month's average)` : undefined}>{formatCurrency(t.amount)}</span>
+                    {t.original && (
+                      <div className="text-[11px] text-ink-3">
+                        {formatMoney(t.original.amount, t.original.currency)} at {t.original.rate}
+                      </div>
+                    )}
+                    {t.intercompany && (
+                      <div className="text-[11px] text-ink-3">
+                        Intercompany with {entities?.get(t.intercompany.counterpartyEntityId)?.code ?? "another entity"}
+                        {t.intercompany.eliminated ? `, ${formatCurrency(t.intercompany.eliminated)} eliminated` : ""}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

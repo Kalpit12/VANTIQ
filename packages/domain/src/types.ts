@@ -54,6 +54,12 @@ export interface Transaction {
   programId: string | null;
   memo: string;
   accountCode: string;
+  /** Multi-entity groups: the entity that booked the line. */
+  entityId?: string;
+  /** Set when the line was translated from the entity's own currency (`amount` is in the reporting currency). */
+  original?: { amount: Cents; currency: string; rate: string };
+  /** Set on lines in an account paired with another entity's account. `eliminated` is the part removed on consolidation. */
+  intercompany?: { pairId: string; counterpartyEntityId: string; eliminated: Cents };
 }
 
 export interface BudgetLine {
@@ -61,6 +67,9 @@ export interface BudgetLine {
   categoryId: string;
   programId: string | null;
   amount: Cents;
+  /** Needed only to eliminate intercompany budget lines in a multi-entity group. */
+  accountCode?: string;
+  entityId?: string;
 }
 
 export interface CashPoint {

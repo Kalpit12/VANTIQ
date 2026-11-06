@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   guessColumns,
   normalize,
@@ -15,6 +15,7 @@ import type { Db, Tx } from "./client";
 import { auditEvents, budgetLines, cashBalances, departments, imports, transactions, vendors } from "./schema";
 import { chunks, ensureAccounts, ensureNamed, ensurePrograms } from "./entities";
 import { withCompany } from "./tenant";
+import { entityResolver } from "./group";
 
 
 /** Step 1: store the parsed file and a first guess at its columns. */
@@ -51,8 +52,9 @@ export async function listImports(db: Db, companyId: string, limit = 20) {
 export async function previewImport(db: Db, companyId: string, importId: string, columnMap: ColumnMap) {
   const draft = await getImport(db, companyId, importId);
   if (!draft || draft.status !== "draft" || !draft.rows) throw new Error("This import was already finished or does not exist.");
-  const res = normalize(draft.kind, { headers: draft.headers, rows: draft.rows }, columnMap);
-  return { valid: res.records.length, errors: res.errors, skipped: res.skipped, sample: res.records.slice(0, 8) };
+  const parsed = normalize(draft.kind, { headers: draft.headers, rows: draft.rows }, columnMap);
+  const res = await withCompany(db, companyId, (tx) => withEntities(tx, parsed));
+  return { valid: res.records.length, errors: res.errors, skipped: res.skipped, sample: parsed.records.filter((r) => !res.errors.some((e) => e.row === r.row)).slice(0, 8) };
 }
 
 export interface CommitResult {
@@ -93,7 +95,25 @@ export async function commitImport(db: Db, companyId: string, userId: string, im
   });
 }
 
-async function saveLedger(tx: Tx, companyId: string, importId: string, res: { records: LedgerRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+/**
+ * Multi-entity groups: each row's entity code becomes an entity id (null for
+ * the parent). Rows naming an entity that isn't set up are reported as errors.
+ */
+async function withEntities<T extends { row: number; entity: string }>(tx: Tx, res: { records: T[]; errors: RowError[]; skipped: number }) {
+  const entities = await entityResolver(tx);
+  const records: (T & { entityId: string | null })[] = [];
+  const errors = [...res.errors];
+  for (const r of res.records) {
+    const e = entities.resolve(r.entity);
+    if (e.ok) records.push({ ...r, entityId: e.id });
+    else errors.push({ row: r.row, message: e.message });
+  }
+  errors.sort((a, b) => a.row - b.row);
+  return { records, errors, skipped: res.skipped };
+}
+
+async function saveLedger(tx: Tx, companyId: string, importId: string, parsed: { records: LedgerRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+  const res = await withEntities(tx, parsed);
   const { records } = res;
   const { idByCode, newAccounts } = await ensureAccounts(tx, companyId, new Map(records.map((r) => [r.accountCode, r.accountName])));
   const vendorIds = await ensureNamed(tx, companyId, vendors, new Set(records.map((r) => r.vendor)));
@@ -102,7 +122,8 @@ async function saveLedger(tx: Tx, companyId: string, importId: string, res: { re
   // Identical lines in one file are legitimate (two equal invoices), so the hash includes the occurrence number.
   const seen = new Map<string, number>();
   const values = records.map((r) => {
-    const base = [r.date, r.accountCode, r.amount, r.vendor, r.memo, r.department, r.program].join("\u001f");
+    // The entity joins the hash only when there is one, so files imported before entities existed still deduplicate.
+    const base = [r.date, r.accountCode, r.amount, r.vendor, r.memo, r.department, r.program, ...(r.entityId ? [r.entityId] : [])].join("\u001f");
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
     return {
@@ -113,6 +134,7 @@ async function saveLedger(tx: Tx, companyId: string, importId: string, res: { re
       vendorId: vendorIds.get(r.vendor) ?? null,
       departmentId: deptIds.get(r.department) ?? null,
       programId: programIds.get(r.program) ?? null,
+      entityId: r.entityId,
       amountMinor: r.amount,
       memo: r.memo,
       sourceHash: createHash("sha256").update(`${base}\u001f${n}`).digest("hex"),
@@ -123,30 +145,36 @@ async function saveLedger(tx: Tx, companyId: string, importId: string, res: { re
   return { inserted, duplicates: values.length - inserted, errors: res.errors, skipped: res.skipped, newAccounts };
 }
 
-async function saveBudget(tx: Tx, companyId: string, importId: string, res: { records: BudgetRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+async function saveBudget(tx: Tx, companyId: string, importId: string, parsed: { records: BudgetRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+  const res = await withEntities(tx, parsed);
   const { records } = res;
   const { idByCode, newAccounts } = await ensureAccounts(tx, companyId, new Map(records.map((r) => [r.accountCode, r.accountName])));
   const programIds = await ensurePrograms(tx, companyId, new Set(records.map((r) => r.program)));
-  const periods = [...new Set(records.map((r) => r.period))];
-  if (periods.length) await tx.delete(budgetLines).where(inArray(budgetLines.period, periods));
+  // The file replaces the budget for the months it covers, for the entities it covers.
+  for (const entityId of new Set(records.map((r) => r.entityId))) {
+    const periods = [...new Set(records.filter((r) => r.entityId === entityId).map((r) => r.period))];
+    await tx.delete(budgetLines).where(and(inArray(budgetLines.period, periods), entityId ? eq(budgetLines.entityId, entityId) : isNull(budgetLines.entityId)));
+  }
   const values = records.map((r) => ({
     companyId,
     importId,
     period: r.period,
     sourceAccountId: idByCode.get(r.accountCode)!,
     programId: programIds.get(r.program) ?? null,
+    entityId: r.entityId,
     amountMinor: r.amount,
   }));
   for (const c of chunks(values)) await tx.insert(budgetLines).values(c);
   return { inserted: values.length, duplicates: 0, errors: res.errors, skipped: res.skipped, newAccounts };
 }
 
-async function saveCash(tx: Tx, companyId: string, importId: string, res: { records: CashRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+async function saveCash(tx: Tx, companyId: string, importId: string, parsed: { records: CashRecord[]; errors: RowError[]; skipped: number }): Promise<CommitResult> {
+  const res = await withEntities(tx, parsed);
   for (const r of res.records) {
     await tx
       .insert(cashBalances)
-      .values({ companyId, period: r.period, balanceMinor: r.balance, importId })
-      .onConflictDoUpdate({ target: [cashBalances.companyId, cashBalances.period], set: { balanceMinor: r.balance, importId } });
+      .values({ companyId, period: r.period, entityId: r.entityId, balanceMinor: r.balance, importId })
+      .onConflictDoUpdate({ target: [cashBalances.companyId, cashBalances.entityId, cashBalances.period], set: { balanceMinor: r.balance, importId } });
   }
   return { inserted: res.records.length, duplicates: 0, errors: res.errors, skipped: res.skipped, newAccounts: 0 };
 }

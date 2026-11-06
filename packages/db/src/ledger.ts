@@ -1,8 +1,9 @@
-import { STANDARD_CATEGORIES, type LedgerData, type Program } from "@vantiq/domain";
+import { consolidate, consolidatedLedgerData, STANDARD_CATEGORIES, type ConsolidationResult, type EntityBooks, type LedgerData, type Program } from "@vantiq/domain";
 import { eq, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { accountMappings, budgetLines, cashBalances, companies, departments, programs, sourceAccounts, transactions, vendors } from "./schema";
 import { withCompany } from "./tenant";
+import { readGroupSetup, type GroupSetup } from "./group";
 
 const KIND = new Map(STANDARD_CATEGORIES.map((c) => [c.id, c.kind]));
 const PHASES = new Set(["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3"]);
@@ -13,6 +14,8 @@ export interface LoadedLedger {
   unmapped: { accounts: number; transactions: number };
   /** Mappings Vantiq guessed that nobody has confirmed. */
   unconfirmed: number;
+  /** Multi-entity groups: the set-up and its consolidation. `data` is then the consolidated group. */
+  group: { setup: GroupSetup; consolidation: ConsolidationResult } | null;
 }
 
 /**
@@ -41,6 +44,7 @@ export async function loadLedger(db: Db, companyId: string): Promise<LoadedLedge
         departmentId: transactions.departmentId,
         programId: transactions.programId,
         memo: transactions.memo,
+        entityId: transactions.entityId,
       })
       .from(transactions);
     const unmappedAccounts = new Set<string>();
@@ -65,11 +69,12 @@ export async function loadLedger(db: Db, companyId: string): Promise<LoadedLedge
         programId: t.programId,
         memo: t.memo,
         accountCode: codeOf.get(t.account) ?? "",
+        ...(t.entityId ? { entityId: t.entityId } : {}),
       });
     }
     const budget = (await tx.select().from(budgetLines)).flatMap((b) => {
       const categoryId = categoryOf.get(b.sourceAccountId);
-      return categoryId ? [{ period: b.period, categoryId, programId: b.programId, amount: b.amountMinor }] : [];
+      return categoryId ? [{ period: b.period, categoryId, programId: b.programId, amount: b.amountMinor, accountCode: codeOf.get(b.sourceAccountId) ?? "", ...(b.entityId ? { entityId: b.entityId } : {}) }] : [];
     });
     const progs: Program[] = (await tx.select().from(programs).orderBy(programs.code)).map((p) => ({
       id: p.id,
@@ -80,23 +85,31 @@ export async function loadLedger(db: Db, companyId: string): Promise<LoadedLedge
     }));
     const vend = (await tx.select().from(vendors)).map((v) => ({ id: v.id, name: v.name, type: v.type as "cro" | "cmo" | "other" }));
     const depts = (await tx.select().from(departments)).map((d) => ({ id: d.id, name: d.name }));
-    const cash = (await tx.select().from(cashBalances).orderBy(cashBalances.period)).map((c) => ({ period: c.period, balance: c.balanceMinor }));
+    const cashRows = await tx.select().from(cashBalances).orderBy(cashBalances.period);
     const unconfirmed = map.filter((m) => m.status === "suggested").length;
-    return {
-      data: {
-        companyName: company?.name ?? "",
-        currency: company?.baseCurrency ?? "USD",
-        categories: STANDARD_CATEGORIES,
-        programs: progs,
-        vendors: vend,
-        departments: depts,
-        transactions: out,
-        budget,
-        cash,
-      },
-      unmapped: { accounts: unmappedAccounts.size, transactions: unmappedTxns },
-      unconfirmed,
+    const base = {
+      companyName: company?.name ?? "",
+      currency: company?.baseCurrency ?? "USD",
+      categories: STANDARD_CATEGORIES,
+      programs: progs,
+      vendors: vend,
+      departments: depts,
     };
+    const unmapped = { accounts: unmappedAccounts.size, transactions: unmappedTxns };
+    const setup = await readGroupSetup(tx, companyId);
+    if (!setup.entities.length) {
+      const cash = cashRows.map((c) => ({ period: c.period, balance: c.balanceMinor }));
+      return { data: { ...base, transactions: out, budget, cash }, unmapped, unconfirmed, group: null };
+    }
+    // A group: split everything by entity (no entity = the parent), then consolidate.
+    const parent = setup.entities.find((e) => e.parent)!;
+    const books = new Map<string, EntityBooks>(setup.entities.map((entity) => [entity.id, { entity, transactions: [], budget: [], cash: [] }]));
+    const book = (id: string | null | undefined) => books.get(id ?? parent.id) ?? books.get(parent.id)!;
+    for (const t of out) book(t.entityId).transactions.push(t);
+    for (const b of budget) book(b.entityId).budget.push(b);
+    for (const c of cashRows) book(c.entityId).cash.push({ period: c.period, balance: c.balanceMinor });
+    const consolidation = consolidate([...books.values()], setup.rates, setup.pairs, { reportingCurrency: base.currency, categories: STANDARD_CATEGORIES });
+    return { data: consolidatedLedgerData(base, consolidation), unmapped, unconfirmed, group: { setup, consolidation } };
   });
 }
 
@@ -111,7 +124,10 @@ export async function ledgerVersion(db: Db, companyId: string): Promise<string> 
         (select coalesce(max(updated_at)::text, '') from account_mappings),
         (select count(*) from account_mappings),
         (select count(*) from programs),
-        (select coalesce(string_agg(name || therapeutic_area || coalesce(phase, ''), ',' order by id), '') from programs)
+        (select coalesce(string_agg(name || therapeutic_area || coalesce(phase, ''), ',' order by id), '') from programs),
+        (select coalesce(string_agg(code || name || currency, ',' order by id), '') from entities),
+        (select count(*) || coalesce(max(updated_at)::text, '') from fx_rates),
+        (select count(*) || coalesce(max(created_at)::text, '') from intercompany_pairs)
       ) as v`);
     return r?.v ?? "";
   });

@@ -216,7 +216,7 @@ export async function runSync(
         await tx
           .insert(cashBalances)
           .values({ companyId, period, balanceMinor: balance })
-          .onConflictDoUpdate({ target: [cashBalances.companyId, cashBalances.period], set: { balanceMinor: balance, importId: null } });
+          .onConflictDoUpdate({ target: [cashBalances.companyId, cashBalances.entityId, cashBalances.period], set: { balanceMinor: balance, importId: null } });
 
       // 3. Reconcile each month against the source's own net income.
       const sums = await tx.execute<{ period: string; net: string }>(sql`

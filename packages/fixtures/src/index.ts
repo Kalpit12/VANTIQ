@@ -218,3 +218,4 @@ export * from "./trials";
 export * from "./close";
 export * from "./income";
 export * from "./inventory";
+export * from "./group";
